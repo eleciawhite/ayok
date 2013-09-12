@@ -1,0 +1,48 @@
+// Controlling the BlinkM
+// Communicating with a peripheral via I2C
+ server.log("Starting BlinkM control");
+ 
+// I2C Interface 
+// Pin 8 is SCL
+// Pin 9 is SDA
+// set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
+hardware.i2c89.configure(CLOCK_SPEED_100_KHZ);
+// the slave address for this device, 00 is broadcast for the blinkM, 
+// the one addated is the default for the device (0x09) shifed up one bit to make
+// 0x12. Then | 1 is a write, | 0 is a read
+local blinkI2CAddr = 0x12;
+// Variable to represent LED state
+local ledState = 0;
+local color = [0xFF, 0xFF, 0xFF];
+
+function startBlinkM() {
+    // i2c.write takes two arguments: address and string. 
+    // here, we send 16 b its of data: the first byte is a register, the second is a command
+    // your needs will vary with the device you are trying to communicate with
+    local result = hardware.i2c89.write(blinkI2CAddr, "n\x00\x00\x00");    
+    server.log(format("Wake up turn off %d", result));  
+}
+function blink() {
+    ledState = ledState ? 0 : 1;
+    local result;
+    if (ledState) {
+        result = hardware.i2c89.write(blinkI2CAddr, "n\x00\x00\x00");        
+    } else {
+        local buffer = format("n%c%c%c", color[0], color[1], color[2]);
+        result = hardware.i2c89.write(blinkI2CAddr, buffer); 
+        local reg = hardware.i2c89.read(blinkI2CAddr, "g", 3);
+        if (reg == null) { server.log("No result from g");}
+        else {server.log(format("Color (%02x %02x %02x)", reg[0], reg[1], reg[2]));}
+    }
+    server.log(format("Writing new color %d", result));  
+    imp.wakeup(1.0, blink);
+}
+
+imp.configure("Imp BlinkM", [], []);
+startBlinkM();
+
+local reg = hardware.i2c89.read(blinkI2CAddr, "g", 3);
+if (reg == null) { server.log("No result from g");}
+else {server.log(format("Color (%02x %02x %02x)", reg[0], reg[1], reg[2]));}
+
+blink();

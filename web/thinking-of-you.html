@@ -1,0 +1,288 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Thinking of You</title>
+        <style type="text/css">
+                body 
+                {
+                    margin-left: 5%;
+                    margin-right: 5%;
+                    padding: 10px 10px 10px 10px;
+                    font-family: sans-serif;      
+                    background-color: Maroon;          
+                }
+                #innerbody  /* give bars on either side */ 
+                {
+                    padding: 0px 10px 10px 10px;
+                    margin-left: 10%;
+                    margin-right: 10%;
+                    background-color: White;
+                } 
+                
+                h2  
+                {
+                    color: Gray; 
+                    background-color: White;
+                    margin-left: 10%;
+                    margin-right: 10%;
+                }
+                h1  
+                {
+                    border-bottom: 1px solid gray; 
+                    font-size: 400%;
+                    color: Gray;
+                    background-color: White;
+                    text-align:center;
+                    padding-top: 10px;
+                    
+                }
+                input 
+                {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    margin-left: 5px;                    
+                    margin-right: 5px;                    
+                }
+                p
+                {   
+                    color: Maroon;  
+                    margin-left: 10%;
+                    margin-right: 10%;
+                }
+                em
+                {
+                    font-weight:bolder;
+                }
+                footer {
+	                color: gray;
+	                margin: 40px 10px 10px 10px;
+	                font-size: 90%;
+	                text-align:center;
+                }
+                a:link, a:visited
+                {
+                    color: Gray; 
+                    background-color: White;
+                    text-decoration: none;
+	                border-bottom: thin dotted Gray;
+                    
+                }
+                h4 
+                {
+                    color: Gray; 
+                    background-color: White;
+                    margin-left: 10%;
+                    margin-right: 10%;
+                }
+                #ColoredSymbol
+                {
+                     font-size:200%; 
+                }
+                
+        </style>
+        <script>
+            /* browsers such as FireFox support text entry of colors when 
+            ** they won't pop up a color wheel. 
+            ** This somewhat awkward function translates from the color name 
+            ** to the RGB hex code. It is case insensitive. 
+            ** (From http://stackoverflow.com/questions/1573053/javascript-function-to-convert-color-names-to-hex-codes) */
+            function colourNameToHex(colour) {
+                var colours = { "aliceblue": "#f0f8ff", "antiquewhite": "#faebd7", "aqua": "#00ffff", "aquamarine": "#7fffd4", "azure": "#f0ffff",
+                    "beige": "#f5f5dc", "bisque": "#ffe4c4", "black": "#000000", "blanchedalmond": "#ffebcd", "blue": "#0000ff", "blueviolet": "#8a2be2", "brown": "#a52a2a", "burlywood": "#deb887",
+                    "cadetblue": "#5f9ea0", "chartreuse": "#7fff00", "chocolate": "#d2691e", "coral": "#ff7f50", "cornflowerblue": "#6495ed", "cornsilk": "#fff8dc", "crimson": "#dc143c", "cyan": "#00ffff",
+                    "darkblue": "#00008b", "darkcyan": "#008b8b", "darkgoldenrod": "#b8860b", "darkgray": "#a9a9a9", "darkgreen": "#006400", "darkkhaki": "#bdb76b", "darkmagenta": "#8b008b", "darkolivegreen": "#556b2f",
+                    "darkorange": "#ff8c00", "darkorchid": "#9932cc", "darkred": "#8b0000", "darksalmon": "#e9967a", "darkseagreen": "#8fbc8f", "darkslateblue": "#483d8b", "darkslategray": "#2f4f4f", "darkturquoise": "#00ced1",
+                    "darkviolet": "#9400d3", "deeppink": "#ff1493", "deepskyblue": "#00bfff", "dimgray": "#696969", "dodgerblue": "#1e90ff",
+                    "firebrick": "#b22222", "floralwhite": "#fffaf0", "forestgreen": "#228b22", "fuchsia": "#ff00ff",
+                    "gainsboro": "#dcdcdc", "ghostwhite": "#f8f8ff", "gold": "#ffd700", "goldenrod": "#daa520", "gray": "#808080", "green": "#008000", "greenyellow": "#adff2f",
+                    "honeydew": "#f0fff0", "hotpink": "#ff69b4",
+                    "indianred ": "#cd5c5c", "indigo ": "#4b0082", "ivory": "#fffff0", "khaki": "#f0e68c",
+                    "lavender": "#e6e6fa", "lavenderblush": "#fff0f5", "lawngreen": "#7cfc00", "lemonchiffon": "#fffacd", "lightblue": "#add8e6", "lightcoral": "#f08080", "lightcyan": "#e0ffff", "lightgoldenrodyellow": "#fafad2",
+                    "lightgrey": "#d3d3d3", "lightgreen": "#90ee90", "lightpink": "#ffb6c1", "lightsalmon": "#ffa07a", "lightseagreen": "#20b2aa", "lightskyblue": "#87cefa", "lightslategray": "#778899", "lightsteelblue": "#b0c4de",
+                    "lightyellow": "#ffffe0", "lime": "#00ff00", "limegreen": "#32cd32", "linen": "#faf0e6",
+                    "magenta": "#ff00ff", "maroon": "#800000", "mediumaquamarine": "#66cdaa", "mediumblue": "#0000cd", "mediumorchid": "#ba55d3", "mediumpurple": "#9370d8", "mediumseagreen": "#3cb371", "mediumslateblue": "#7b68ee",
+                    "mediumspringgreen": "#00fa9a", "mediumturquoise": "#48d1cc", "mediumvioletred": "#c71585", "midnightblue": "#191970", "mintcream": "#f5fffa", "mistyrose": "#ffe4e1", "moccasin": "#ffe4b5",
+                    "navajowhite": "#ffdead", "navy": "#000080",
+                    "oldlace": "#fdf5e6", "olive": "#808000", "olivedrab": "#6b8e23", "orange": "#ffa500", "orangered": "#ff4500", "orchid": "#da70d6",
+                    "palegoldenrod": "#eee8aa", "palegreen": "#98fb98", "paleturquoise": "#afeeee", "palevioletred": "#d87093", "papayawhip": "#ffefd5", "peachpuff": "#ffdab9", "peru": "#cd853f", "pink": "#ffc0cb", "plum": "#dda0dd", "powderblue": "#b0e0e6", "purple": "#800080",
+                    "red": "#ff0000", "rosybrown": "#bc8f8f", "royalblue": "#4169e1",
+                    "saddlebrown": "#8b4513", "salmon": "#fa8072", "sandybrown": "#f4a460", "seagreen": "#2e8b57", "seashell": "#fff5ee", "sienna": "#a0522d", "silver": "#c0c0c0", "skyblue": "#87ceeb", "slateblue": "#6a5acd", "slategray": "#708090", "snow": "#fffafa", "springgreen": "#00ff7f", "steelblue": "#4682b4",
+                    "tan": "#d2b48c", "teal": "#008080", "thistle": "#d8bfd8", "tomato": "#ff6347", "turquoise": "#40e0d0",
+                    "violet": "#ee82ee",
+                    "wheat": "#f5deb3", "white": "#ffffff", "whitesmoke": "#f5f5f5",
+                    "yellow": "#ffff00", "yellowgreen": "#9acd32"
+                };
+
+                if (typeof colours[colour.toLowerCase()] != 'undefined')
+                    return colours[colour.toLowerCase()];
+
+                return false;
+            }
+
+            /* translate from hex string to R, G, and B integer values. 
+            ** (From http://www.javascripter.net/faq/hextorgb.htm) */
+            function hexToR(h) { return parseInt((cutHex(h)).substring(0, 2), 16) }
+            function hexToG(h) { return parseInt((cutHex(h)).substring(2, 4), 16) }
+            function hexToB(h) { return parseInt((cutHex(h)).substring(4, 6), 16) }
+            function cutHex(h) { return (h.charAt(0) == "#") ? h.substring(1, 7) : h }
+            
+            /* When the user presses the hug button (or whatever is it called), the form
+            ** is sent to electric imp where it will be sent to the LED */
+            function sendHug(form) {
+                var c;
+                if (localStorage.usercolor[0] != '#') {
+                    c = colourNameToHex(localStorage.usercolor);
+                } else {
+                    c = localStorage.usercolor;
+                }
+
+                form.value.value = "{ \"r\": " + hexToR(c) + ", \"g\": " + hexToG(c) +
+                                ", \"b\": " + hexToB(c) +
+                                ", \"name\": \"" + localStorage.username + "\" }"
+                form.submit();
+            }
+
+            /* The button to send something changes its name every time you 
+            ** reload or click. CBW wants *other* names but I'm keeping it 
+            ** clean. */
+            function changeHugButtonText() {
+                var raw = Math.random();
+                var arrayOfStrings = Array("Hug", "Wink", "Cuddle", "Snuggle", "Wave", "Smooch", "Smile", "Fuzzy", "Giggle");
+                var selectValue = Math.floor(raw * arrayOfStrings.length);
+                document.getElementById("HugButton").value = arrayOfStrings[selectValue];
+            }
+
+            /* The settings "panel" gets turned on or off depending on if
+            ** it has been clicked or not.  */
+            function turnOffSettings() {
+                document.getElementById("SettingsClosed").style.display = "block";
+                document.getElementById("Settings").style.display = "none";
+            }
+            function turnOnSettings() {
+                document.getElementById("SettingsClosed").style.display = "none";
+                document.getElementById("Settings").style.display = "block";
+            }
+
+            /* Verify the coookie exists, this sends the user to the initial 
+            ** welcome screen or to the returning user screen. It is ok for  
+            ** the user name to be blank but the color must be filled in */
+            function checkCookie() {
+                var usercolor = localStorage.usercolor;
+                if (usercolor != null && usercolor != "") {
+                    // have name: show welcome and closed settings
+                    document.getElementById("WelcomeWithCookie").style.display = "block";
+                    document.getElementById("WelcomeNoCookie").style.display = "none";
+                    document.getElementById("ColoredSymbol").style.color = usercolor;
+                    turnOffSettings();
+                    changeHugButtonText();
+                } else {
+                    // no name: show initial welcome and open settings
+                    document.getElementById("WelcomeNoCookie").style.display = "block";
+                    document.getElementById("WelcomeWithCookie").style.display = "none";
+                    turnOnSettings();
+                }
+            }
+
+
+            /* When the user puts in their name, the characters are summed
+            ** to make a unique color. If the color is a bit dark, they 
+            ** get messed with to make it a bit lighter. The algorithm 
+            ** for this is a bit silly but it led to a nice color for my
+            ** name and good ones for the ones I tried.
+            */
+            function inputName(form) {
+                var color = 0;
+                var b = 0;
+                var value = 0;
+                var colorString = "#";
+
+                var name = form.username.value.toString();
+                localStorage.username = name;
+
+                for (var i = 0; i < name.length; i++) {
+                    color += name.charCodeAt(i) << (8 * b);
+                    b = b + 1;
+                    if (b > 3) { b = 0; }
+                }
+                color = color & 0x00FFFFFF;
+                value = (color & 0xFF) + ((color & 0xFF00) >> 8) + ((color & 0xFF0000) > 16);
+
+                if (value < 500) { // color is not bright enough, tweak some
+                    value = 500 - value;
+                    value = value >> 2;
+                    var red = (color >> 16) & 0xFF;
+                    var green = (color >> 8) & 0xFF;
+                    var blue = (color) & 0xFF;
+                    red += value * 2; // extra reds
+                    green += value;
+                    blue += value;
+                    if (red > 255) { red = 255; }
+                    if (green > 255) { green = 255; }
+                    if (blue > 255) { blue = 255; }
+
+                    color = (red << 16) + (green << 8) + blue;
+                }
+
+                colorString += Number(color).toString(16);
+                localStorage.usercolor = colorString;
+                location.reload();
+            }
+            /* If the user doesn't like their color, they can input it 
+            ** separately. In Chrome, a color wheel comes up. In
+            ** Firefox, it is a text box. The user can type in any web
+            ** color. No verification is done so the user can put in
+            ** invalid values leading to an icky grey color. */
+            function inputColor(form) {
+                localStorage.usercolor = form.usercolor.value;
+                location.reload();
+            }
+        </script>
+    </head>
+    <body onload="checkCookie()"> <div id="innerbody">
+        <h1> Thinking of you</h1>
+        <section  id="WelcomeNoCookie"> 
+            <!-- if no color cookie exists, this is a new user -->
+            <h2 > Welcome! </h2>
+        </section>
+        <section id="WelcomeWithCookie">
+            <h2> Welcome 
+               <script>
+                   document.write(localStorage.username);
+                </script> 
+                <span id = "ColoredSymbol"> &hearts;</span>
+            </h2>
+            <form action="https://api.electricimp.com/v1/d2c3f0ad3725dc4c/304b7e255d86f5c2" method="post">
+            <input type="hidden" name="value">
+
+            <p>Send <em>Christopher</em> some love!
+
+            <input id="HugButton" type="button" value="Hug"  onclick="sendHug(this.form);" onmouseup="changeHugButtonText();"> 
+            </form>
+            </p> 
+           
+        </section>
+        <section id="SettingsClosed">
+        <h4 > <a href="thinking-of-you.html#Settings" onclick="turnOnSettings();"> + Settings </a></h4> 
+
+        </section>
+        <section id="Settings">
+        <h4 > <a href="thinking-of-you.html" onclick="turnOffSettings();"> Settings </a></h4> 
+            <p>If you change your name, a new color will be generated for you. </p>
+            <form>
+                <p>Your name: <input type="text" name="username" /> <input type="button" value="Submit" onclick="inputName(this.form);">
+                </p>
+                <!-- input type "color" is supported by chrome but not ipad safari or firefox --> 
+                <!-- in safari and firefox, it is a text box and the return is a string -->
+                <!-- in chrome, the return is a string of the form %23ffff00 so it is possible to check --> 
+                <p>Don't like your color? 
+                 <input type="color" name="usercolor"/> <input type="button" value="Choose a Color"  onclick="inputColor(this.form);">
+                </p>
+        
+            </form>
+    </section>
+    <footer>
+        No copyright, do as you will but have fun doing it. Site and project originally created by <a href="http://www.logicalelegance.com/">Logical Elegance</a>.
+    </footer>
+    </div> <!-- innerbody --> </body>
+</html>

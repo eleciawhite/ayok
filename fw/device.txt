@@ -1,4 +1,4 @@
-// Controlling the BlinkM
+// BlinkM color from planner
 // Communicating with a peripheral via I2C
  server.log("Starting BlinkM control");
  
@@ -34,11 +34,24 @@ function blink() {
         if (reg == null) { server.log("No result from g");}
         else {server.log(format("Color (%02x %02x %02x)", reg[0], reg[1], reg[2]));}
     }
-    server.log(format("Writing new color %d", result));  
-    imp.wakeup(1.0, blink);
+    imp.wakeup(100.0, blink);
 }
 
-imp.configure("Imp BlinkM", [], []);
+class LEDColor extends InputPort
+{
+ 
+    type = "array"
+    name = "color"
+ 
+    function set(value) {        
+        color[0] = value.r;
+        color[1] = value.g;
+        color[2] = value.b;
+        server.log(format("New color (%02x %02x %02x)", color[0], color[1], color[2]));
+    }
+}
+
+imp.configure("Imp BlinkM", [LEDColor], []);
 startBlinkM();
 
 local reg = hardware.i2c89.read(blinkI2CAddr, "g", 3);

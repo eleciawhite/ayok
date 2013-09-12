@@ -1,61 +1,151 @@
-// BlinkM color from planner
-// Communicating with a peripheral via I2C
- server.log("Starting BlinkM control");
+// Internet enabled LED
+// Based in large part on http://devwiki.electricimp.com/doku.php?id=quinn
+ server.log("Starting LED control");
+    
  
-// I2C Interface 
-// Pin 8 is SCL
-// Pin 9 is SDA
-// set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
-hardware.i2c89.configure(CLOCK_SPEED_100_KHZ);
-// the slave address for this device, 00 is broadcast for the blinkM, 
-// the one addated is the default for the device (0x09) shifed up one bit to make
-// 0x12. Then | 1 is a write, | 0 is a read
-local blinkI2CAddr = 0x12;
+ /* Pin Assignments according to silkscreen
+ * Pin 9 = Red 
+ * Pin 8 = Blue 
+ * Pin 7 = Green
+ * Pin 5 = Battery input
+ */
+ 
+ // initialize some handy values
+// PWM frequency in Hz
+local pwm_f = 500.0;
+ 
+// Configure hardware
+hardware.pin9.configure(PWM_OUT, 1.0/pwm_f, 1.0);
+hardware.pin8.configure(PWM_OUT, 1.0/pwm_f, 1.0);
+hardware.pin7.configure(PWM_OUT, 1.0/pwm_f, 1.0);
+
+
 // Variable to represent LED state
 local ledState = 0;
-local color = [0xFF, 0xFF, 0xFF];
+local currentLED = [0, 0, 0];
+local goalLED = [0xFF, 0xFF, 0xFF]; 
+const ledSteps = 20; // steps in ramp at 100ms
+local currentLedStep;
 
-function startBlinkM() {
-    // i2c.write takes two arguments: address and string. 
-    // here, we send 16 b its of data: the first byte is a register, the second is a command
-    // your needs will vary with the device you are trying to communicate with
-    local result = hardware.i2c89.write(blinkI2CAddr, "n\x00\x00\x00");    
-    server.log(format("Wake up turn off %d", result));  
-}
-function blink() {
-    ledState = ledState ? 0 : 1;
-    local result;
-    if (ledState) {
-        result = hardware.i2c89.write(blinkI2CAddr, "n\x00\x00\x00");        
-    } else {
-        local buffer = format("n%c%c%c", color[0], color[1], color[2]);
-        result = hardware.i2c89.write(blinkI2CAddr, buffer); 
-        local reg = hardware.i2c89.read(blinkI2CAddr, "g", 3);
-        if (reg == null) { server.log("No result from g");}
-        else {server.log(format("Color (%02x %02x %02x)", reg[0], reg[1], reg[2]));}
-    }
-    imp.wakeup(100.0, blink);
-}
+const TIME_TO_SLEEP = 30;
 
 class LEDColor extends InputPort
 {
- 
     type = "array"
-    name = "color"
+    name = "goalLED"
+    redPin = null
+    grnPin = null
+    bluPin = null
  
-    function set(value) {        
-        color[0] = value.r;
-        color[1] = value.g;
-        color[2] = value.b;
-        server.log(format("New color (%02x %02x %02x)", color[0], color[1], color[2]));
+    constructor(name, redPin, grnPin, bluPin) {
+        this.redPin = redPin
+        this.grnPin = grnPin
+        this.bluPin = bluPin
+        this.off();
+    }
+ 
+    function set(value) {
+        goalLED[0] = value.r;
+        goalLED[1] = value.g;
+        goalLED[2] = value.b;
+        if ("name" in value) {
+            server.log(format("%s sent color: %02X, %02X, %02X", value.name, goalLED[0], goalLED[1], goalLED[2]));      
+        } else {
+            server.log(format("No name: color %02X, %02X, %02X", goalLED[0], goalLED[1], goalLED[2]));              
+        }
+        ledHugRamp();
+        hardware.sampler.start();
+        
+    }
+    function update() {
+        local div =  (1.0/255.0);
+        this.redPin.write( currentLED[0] * div);
+        this.grnPin.write( currentLED[1] * div);
+        this.bluPin.write( currentLED[2] * div);
+    }        
+    function off() {
+        this.redPin.write(0);
+        this.grnPin.write(0);
+        this.bluPin.write(0);
     }
 }
 
-imp.configure("Imp BlinkM", [LEDColor], []);
-startBlinkM();
+local rgbLed = LEDColor("RGBLed", hardware.pin9, hardware.pin8, hardware.pin7);
 
-local reg = hardware.i2c89.read(blinkI2CAddr, "g", 3);
-if (reg == null) { server.log("No result from g");}
-else {server.log(format("Color (%02x %02x %02x)", reg[0], reg[1], reg[2]));}
+// ramp up
+// hold
+// ramp down
+// off
+function ledHugRamp() 
+{
+    local difference = [0, 0, 0];
+    local totalDifference = 0;
+    local i;
+    
+    for (i = 0; i < 3; i++) {
+        difference[i] = goalLED[i] - currentLED[i];   
+        if (0 < difference[i] && difference[i] < ledSteps) {
+            difference[i] = ledSteps; // will be 1 after divide
+            
+        } else if (0 > difference[i] && -difference[i] < ledSteps) {
+            difference[i] = -ledSteps; // will be -1
+        }
+        currentLED[i] += (difference[i] / ledSteps);
+        totalDifference += difference[i];
+    }
+    if (-3 < totalDifference && totalDifference < 3) {
+        local goal = 0;
+        for (i = 0; i < 3; i++) {
+            goal += goalLED[i];
+            currentLED[i] = goalLED[i]; 
+            goalLED[i] = 0;
+        }
+        if (goal == 0) {
+            // finished
+            rgbLed.off();
+            server.log(format("OFF"));              
+            startSampler();
+        } else {
+            rgbLed.update();
+            imp.wakeup(5.0, ledHugRamp);        // it will start ramping down
+        }
+    } else {   
+        rgbLed.update();
+        imp.wakeup(0.05, ledHugRamp);
+    }
+}
 
-blink();
+function samplesReady(buffer, length)
+{
+    local i;
+    if (length > 0) {
+        for ( i = 0;  i < length; i += 2 ) {        
+            local d = (buffer[i+1] << 8) + buffer[i];
+            server.log(format("Voltage %04X", d));
+        }
+            imp.wakeup(1, startSampler);
+//        stopSampler();
+    } 
+}
+ 
+function stopSampler()
+{
+    hardware.sampler.stop();
+}
+ 
+function startSampler()
+{
+    hardware.sampler.start();
+}
+ 
+ 
+buffer1 <- blob(2);
+buffer2 <- blob(2);
+hardware.sampler.configure(hardware.pin5, 1, [buffer1, buffer2], samplesReady);
+
+ledHugRamp(); // white hug on boot
+hardware.sampler.start();
+imp.setpowersave(true);
+
+imp.configure("LED out with batts", [rgbLed], []);
+ 

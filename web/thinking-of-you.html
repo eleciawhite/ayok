@@ -137,9 +137,10 @@
                     c = localStorage.usercolor;
                 }
 
-                form.value.value = "{ \"r\": " + hexToR(c) + ", \"g\": " + hexToG(c) +
-                                ", \"b\": " + hexToB(c) +
-                                ", \"name\": \"" + localStorage.username + "\" }"
+                form.r.value = hexToR(c);
+                form.g.value = hexToG(c);
+                form.b.value = hexToB(c);
+                form.name.value = localStorage.username;
                 form.submit();
             }
 
@@ -252,8 +253,11 @@
                 </script> 
                 <span id = "ColoredSymbol"> &hearts;</span>
             </h2>
-            <form action="https://api.electricimp.com/v1/d2c3f0ad3725dc4c/304b7e255d86f5c2" method="post">
-            <input type="hidden" name="value">
+            <form action="https://agent.electricimp.com/nSEfD0YxscF2" method="get">
+            <input type="hidden" name="r"> 
+            <input type="hidden" name="g"> 
+            <input type="hidden" name="b"> 
+            <input type="hidden" name="name"> 
 
             <p>Send <em>Christopher</em> some love!
 

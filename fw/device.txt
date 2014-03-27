@@ -22,7 +22,7 @@ hardware.pin7.configure(PWM_OUT, 1.0/pwm_f, 1.0);
 
 
 /**************************** LED *******************************************/
-// Variables to represent LED state
+// Variable to represent LED state
 local goalLED = [0xFF, 0xFF, 0xFF];
 local currentLED = [0, 0, 0];
 local ledSteps = 20 // steps in ramp at 100ms
@@ -109,6 +109,31 @@ function ledHugRamp() {
     }
 }
 
+function setLed(state)
+{
+    if (state) {
+        goalLED[0] = 0;
+        goalLED[1] = 255;
+        goalLED[2] = 255;
+    } else {
+        goalLED[0] = 255;
+        goalLED[1] = 0;
+        goalLED[2] = 255;
+    }
+        
+    ledHugRamp(); 
+    hardware.sampler.start();
+
+}
+function setHugColor (rgb)
+{
+        goalLED[0] = rgb[0];
+        goalLED[1] = rgb[1];
+        goalLED[2] = rgb[2];
+        ledHugRamp();
+        hardware.sampler.start();
+}
+
 /************************ Accelerometer ***************************************/
 
 
@@ -116,6 +141,8 @@ function ledHugRamp() {
 /************************ General ***************************************/
 imp.setpowersave(true);
 
-imp.configure("Accelerometer testing", [rgbLed], []);
+// imp.configure("Accelerometer testing", [rgbLed], []);
+//agent.on("led", setLed);
+agent.on("hug", setHugColor);
  
 ledHugRamp(); // white hug on boot

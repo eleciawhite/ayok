@@ -1,4 +1,4 @@
-    // Log the URLs we need
+// Log the URLs we need
 // server.log("My URL: " + http.agenturl());
 
 
@@ -281,9 +281,9 @@ class TwitterClient {
             return null;
         }
     }
-
 }
 
+// Twitter permissions for @ayok_status
 _CONSUMER_KEY <- "HxwLkDWJTHDZo5z3nENPA"
 _CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
 _ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
@@ -291,12 +291,29 @@ _ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
      
      
 twitter <- TwitterClient(_CONSUMER_KEY, _CONSUMER_SECRET, _ACCESS_TOKEN, _ACCESS_SECRET);
+/**************************** End twitter block  *******************************************/
+
+/**************************** Device handling  *******************************************/
+local lastCheckInTime = 0;
+local dtTweetMotionDetected = 80; // seconds
+local dtTweetNoMotionDetected = 600; // seconds
+local nothingFromDeviceTimer;
 
 function motionOnDevice(type)
 {
-    local d = date();
-    
-    twitter.update_status("(" + d.hour + ":" + d.min + ":" + d.sec + ") I felt movement. It was a " + type);
+    local thisCheckInTime = time();
+    if ((lastCheckInTime != 0) && 
+        ((thisCheckInTime - lastCheckInTime) > dtTweetMotionDetected)) {
+
+        local d = date(thisCheckInTime, 'u'); // UTC time
+        local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
+        local str = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
+        twitter.update_status(day[d.wday] + str + " I felt movement. It was a " + type);
+    }
+    lastCheckInTime = thisCheckInTime;
+    imp.cancelwakeup(nothingFromDeviceTimer)
+    nothingFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, nothingFromDevice);
+
 }
      
 function requestHandler(request, response) {
@@ -320,7 +337,33 @@ function requestHandler(request, response) {
   }
 }
  
+function nothingFromDevice()
+{
+    local stringOptions = [
+        "No one has played with me since ",
+        "I need to be pet but haven't been since ",
+        "The last time someone filled my cuddle tank was ",
+        "It's been eons since my last hug: ",
+        "I'm so lonely, no one has paid attention to me for so long: ",
+        "I'm hungry, hungry for hugs! Last feeing was "
+        ];
+    
+    if (lastCheckInTime) {
+        local d = date(lastCheckInTime, 'u'); // UTC time
+        local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
+        local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
+    
+        local choice  = math.rand() % stringOptions.len();
+        twitter.update_status(stringOptions[choice] + day[d.wday] + datestr);
+    } else {
+        twitter.update_status("No movement since device turned on!");
+
+    }
+    nothingFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, nothingFromDevice);
+}
+ 
 // register the HTTP handler
 http.onrequest(requestHandler);
 device.on("motionDetected", motionOnDevice);
+nothingFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, nothingFromDevice);
     

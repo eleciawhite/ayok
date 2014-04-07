@@ -20,12 +20,6 @@ hardware.pin7.configure(PWM_OUT, 1.0/pwm_f, 1.0);
 
 hardware.i2c89.configure(CLOCK_SPEED_400_KHZ);
 i2c <- hardware.i2c89 // now can use i2c.read()
-const accelerometer = 0x1D;
-const out_x = 0x01;
-const xyz_data = 0x0E;
-const who_am_i = 0x0D;
-const control_reg = 0x2A;
-
 
 /**************************** LED *******************************************/
 // Variable to represent LED state

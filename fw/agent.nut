@@ -294,25 +294,30 @@ twitter <- TwitterClient(_CONSUMER_KEY, _CONSUMER_SECRET, _ACCESS_TOKEN, _ACCESS
 /**************************** End twitter block  *******************************************/
 
 /**************************** Device handling  *******************************************/
-local lastCheckInTime = 0;
+local lastTimeMotionDetected = 0;
+local lastTimeBatteryUpdate = 0;
+local lastBatteryReading = 0;
 local dtTweetMotionDetected = 80; // seconds
-local dtTweetNoMotionDetected = 600; // seconds
-local nothingFromDeviceTimer;
+local dtTweetBatteryUpdateDetected = 80; // seconds
+local dtTweetNoMotionDetected = 12 * 60 * 60; // seconds ==> 12 hours
+local dtTweetNoUpdatesReceived = 6 * 60 * 60; // seconds ==> 6 hours
+local noMotionFromDeviceTimer;
+local noUpdatesFromDeviceTimer;
 
 function motionOnDevice(type)
 {
     local thisCheckInTime = time();
-    if ((lastCheckInTime != 0) && 
-        ((thisCheckInTime - lastCheckInTime) > dtTweetMotionDetected)) {
+    if ((lastTimeMotionDetected != 0) && 
+        ((thisCheckInTime - lastTimeMotionDetected) > dtTweetMotionDetected)) {
 
         local d = date(thisCheckInTime, 'u'); // UTC time
         local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
         local str = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
         twitter.update_status(day[d.wday] + str + " I felt movement. It was a " + type);
     }
-    lastCheckInTime = thisCheckInTime;
-    imp.cancelwakeup(nothingFromDeviceTimer)
-    nothingFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, nothingFromDevice);
+    lastTimeMotionDetected = thisCheckInTime;
+    imp.cancelwakeup(noMotionFromDeviceTimer)
+    noMotionFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, noMotionFromDevice);
 
 }
      
@@ -337,7 +342,7 @@ function requestHandler(request, response) {
   }
 }
  
-function nothingFromDevice()
+function noMotionFromDevice()
 {
     local stringOptions = [
         "No one has played with me since ",
@@ -345,11 +350,11 @@ function nothingFromDevice()
         "The last time someone filled my cuddle tank was ",
         "It's been eons since my last hug: ",
         "I'm so lonely, no one has paid attention to me for so long: ",
-        "I'm hungry, hungry for hugs! Last feeing was "
+        "I'm hungry, hungry for hugs! Last feeding was "
         ];
     
-    if (lastCheckInTime) {
-        local d = date(lastCheckInTime, 'u'); // UTC time
+    if (lastTimeMotionDetected) {
+        local d = date(lastTimeMotionDetected, 'u'); // UTC time
         local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
         local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
     
@@ -359,11 +364,47 @@ function nothingFromDevice()
         twitter.update_status("No movement since device turned on!");
 
     }
-    nothingFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, nothingFromDevice);
+    noMotionFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, noMotionFromDevice);
 }
+ 
+function noBatteryUpdateFromDevice()
+{
+    local stringOptions = [
+        "Devcie did not check in, last check in at ",
+        "AYOK status, I've been turned off since ",
+        ];
+
+    local d = date(lastTimeBatteryUpdate, 'u'); // UTC time
+    local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
+    local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
+
+    local choice  = math.rand() % stringOptions.len();
+    twitter.update_status(stringOptions[choice] + day[d.wday] + datestr);
+    noUpdatesFromDeviceTimer = imp.wakeup(dtTweetNoUpdatesReceived, noBatteryUpdateFromDevice);
+}
+
+function batteryUpdateOnDevice(percentFull)
+{
+
+    local thisCheckInTime = time();
+    if ((thisCheckInTime - lastTimeBatteryUpdate) > dtTweetBatteryUpdateDetected) {
+        server.log("Got battery update " + percentFull)
+        local d = date(thisCheckInTime, 'u'); // UTC time
+        local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
+        local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
+        
+        twitter.update_status("Temporary message: " + day[d.wday] + datestr + " battery update: " + percentFull);
+    }
+    // update the device timer
+    noUpdatesFromDeviceTimer = imp.wakeup(dtTweetNoUpdatesReceived, noBatteryUpdateFromDevice);
+    lastTimeBatteryUpdate = thisCheckInTime;
+    lastBatteryReading = percentFull;
+} 
  
 // register the HTTP handler
 http.onrequest(requestHandler);
 device.on("motionDetected", motionOnDevice);
-nothingFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, nothingFromDevice);
+device.on("batteryUpdate", batteryUpdateOnDevice);
+noMotionFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, noMotionFromDevice);
+noUpdatesFromDeviceTimer = imp.wakeup(dtTweetNoUpdatesReceived, noBatteryUpdateFromDevice);
     

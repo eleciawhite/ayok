@@ -1,5 +1,4 @@
-// Internet enabled accelerometer
- server.log("Hello");
+// Are you ok? widget for monitoring loved ones
     
  
 /**************************** Hardware *******************************************/
@@ -12,19 +11,13 @@
  * Pin 9 = I2C SDA
 */
  
-// PWM frequency in Hz
-local pwm_f = 500.0;
-hardware.pin2.configure(PWM_OUT, 1.0/pwm_f, 1.0);
-hardware.pin5.configure(PWM_OUT, 1.0/pwm_f, 1.0);
-hardware.pin7.configure(PWM_OUT, 1.0/pwm_f, 1.0);
-
 hardware.i2c89.configure(CLOCK_SPEED_400_KHZ);
 i2c <- hardware.i2c89 // now can use i2c.read()
 
 /**************************** LED *******************************************/
 // Variable to represent LED state
 local goalLED = [0xFF, 0xFF, 0xFF];
-local currentLED = [0, 0, 0];
+local currentLED = [0, 0, 0];	
 local ledSteps = 20 // steps in ramp at 100ms
 local currentLedStep = 0 
 local inLEDRamp = false;
@@ -39,6 +32,12 @@ class LEDColor extends InputPort
 
 
     constructor(name, redPin, grnPin, bluPin) {
+        // PWM frequency in Hz
+        local pwm_f = 500.0;
+        redPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
+        grnPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
+        bluPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
+        
         this.redPin = redPin
         this.grnPin = grnPin
         this.bluPin = bluPin
@@ -57,8 +56,7 @@ class LEDColor extends InputPort
             goalLED[0], goalLED[1], goalLED[2]));      
         }
         ledHugRamp();
-        hardware.sampler.start();
-        
+
     }
     function update() {
         local div =  (1.0/255.0);
@@ -72,8 +70,8 @@ class LEDColor extends InputPort
         this.bluPin.write(0);
     }
 }
-local rgbLed = LEDColor("RGBLed", hardware.pin2, hardware.pin5, hardware.pin7);
 
+local rgbLed = LEDColor("RGBLed", hardware.pin2, hardware.pin5, hardware.pin7);
 function ledHugRamp() {
     local difference = [0, 0, 0];
     local totalDifference = 0;
@@ -100,7 +98,9 @@ function ledHugRamp() {
             // finished
             inLEDRamp = false;
             rgbLed.off();
-            server.log(format("OFF"));              
+            server.log(format("OFF")); 
+            CheckBattery();
+
         } else {
             rgbLed.update();
             imp.wakeup(5.0, ledHugRamp);        // it will start ramping down
@@ -122,14 +122,75 @@ function setHugColor (rgb)
         goalLED[2] = rgb[2];
         ledHugRamp();
         inLEDRamp = true;
-        hardware.sampler.start();
     }
 }
 
+/************************ Fuel Gauge ***************************************/
+// MAX17043 LiPo fuel gauge to determine the state of charge (SOC) since simply 
+// checking the voltage on a LiPo is unlikely to account for a good reading
+// (also, my A/D pin is otherwise occupied)
+
+// Holding both SDA and SCL logic-low forces the MAX17043/MAX17044 into Sleep mode.
+// Alternatively, set the SLEEP bit in the CONFIG register to logic 1 through I2C
+// To exit Sleep mode, write SLEEP to logic 0
+
+const FUEL_GAGUE_ADDR = 0x6C  // 0x6C write, 0x6D read
+const VCELL_REG       = 0x02  // Reports 12-bit A/D measurement of battery voltage. (R)
+const SOC_REG         = 0x04  // Reports 16-bit SOC result calculated by ModelGauge algorithm. (R)
+const MODE_REG        = 0x06  // Sends special commands to the IC. (W)
+const VERSION_REG     = 0x08  // Returns IC version. (R)
+const VERSION_EXPECTED = 0x0003
+const CONFIG_REG      = 0x0C  // Battery compensation. Adjusts IC performance based on application conditions.   (R/W)
+const COMMAND_REG     = 0xFE  // Sends special commands to the IC. (W)
+
+function FuelGaugeReadVersion()
+{
+	local numBytes = 2;
+	local data;
+    data = i2c.read(FUEL_GAGUE_ADDR, format("%c", VERSION_REG), numBytes);
+	if (data) {
+        local tmp = (data[0] << 8) + data[1];
+        if (tmp == VERSION_EXPECTED) {
+		    server.log("Fuel gauge found.");
+	    } else {
+    		server.log("Fuel gauge version " + format("0x%02x 0x%02X", data[0], data[1]));
+	    }
+		return 
+	} else {
+		server.log("Nothing read from fuel gauge.");
+	}
+}
+
+function FuelGaugeReadSoC()
+{
+    
+	local numBytes = 2;
+	local data;
+    data = i2c.read(FUEL_GAGUE_ADDR, format("%c", SOC_REG), numBytes);
+	if (data) {
+        local tmp = (data[0] << 8) + data[1];
+        server.log("Fuel gauge read " + tmp);
+		return tmp;
+    }
+
+}
+
+function FuelGaugeSleep(state) 
+{
+    
+}
+function FuelGaugeResetFromBoot()
+{
+	FuelGaugeReadVersion();
+	FuelGaugeReadSoC();
+}
+
+
 /************************ Accelerometer ***************************************/
 // Many thanks to https://gist.github.com/duppypro/7225636 
-// I mooched much of that code
-const MMA8452Q_ADDR = 0x1D // A '<< 1' is needed.  I add the '<< 1' in the helper functions.
+// I mooched much of that code for the MMA8452Q accelerometer, though I made some
+// changes for efficiency
+const ACCEL_ADDR = 0x3A // 0x1D << 1
 const STATUS        = 0x00
 const OUT_X_MSB        = 0x01
 const WHO_AM_I         = 0x0D
@@ -196,7 +257,7 @@ const CTRL_REG5        = 0x2E
 function writeReg(addressToWrite, dataToWrite) {
     local err = null
     while (err == null) {
-        err = i2c.write(MMA8452Q_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
+        err = i2c.write(ACCEL_ADDR, format("%c%c", addressToWrite, dataToWrite))
         // server.log(format("i2c.write addr=0x%02x data=0x%02x", addressToWrite, dataToWrite))
         if (err == null) {
             server.error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.")
@@ -214,7 +275,7 @@ function readSequentialRegs(addressToRead, numBytes) {
     local data = null
     
     while (data == null) {
-        data = i2c.read(MMA8452Q_ADDR << 1, format("%c", addressToRead), numBytes)
+        data = i2c.read(ACCEL_ADDR, format("%c", addressToRead), numBytes)
         if (data == null) {
             server.error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.")
             imp.sleep(i2cRetryPeriod)
@@ -227,8 +288,8 @@ function readSequentialRegs(addressToRead, numBytes) {
 function readReg(addressToRead) {
     return readSequentialRegs(addressToRead, 1)[0]
 }  
-// Reset the MMA8452Q
-function MMA8452QReset() {
+// Reset the accelerometer
+function AccelerometerResetFromBoot() {
     local reg
     
     do {
@@ -248,7 +309,7 @@ function MMA8452QReset() {
     do {
         reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
         if (reg == I_AM_MMA8452Q) {
-            server.log("accel ok")
+            server.log("Accelerometer found.")
             break
         } else {
             server.error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg))
@@ -256,7 +317,7 @@ function MMA8452QReset() {
         }
     } while (true)
     
-    MMA8452QSetActive(false);
+    AccelerometerSetActive(false);
     writeReg(CTRL_REG1, 0x1A); // 100 Hz ODR + fast read + low noise
     
     // Set up accel for transient detection, see 
@@ -282,9 +343,9 @@ function MMA8452QReset() {
 
     writeReg(CTRL_REG3, WAKE_TRANSIENT_BIT | WAKE_PULSE_BIT | IPOL_BIT);  // move to int1
     
-    MMA8452QSetActive(true);
+    AccelerometerSetActive(true);
 }
-function MMA8452QSetActive(mode) {
+function AccelerometerSetActive(mode) {
     // Sets the MMA8452Q active mode. 
     // 0 == STANDBY for changing registers
     // 1 == ACTIVE for outputting data
@@ -310,7 +371,7 @@ function readAccelData() {
     return signedData;
 }
 
-function MMA8452QInterruptHandler() {
+function AccelerometerIRQ() {
     local reg
  
     if (hardware.pin1.read() == 1) { // only react to low to high edge
@@ -319,7 +380,7 @@ function MMA8452QInterruptHandler() {
             reg = readReg(TRANSIENT_SRC) // this clears SRC_TRANSIENT_BIT
             server.log(format("Transient src 0x%02x", reg))
             agent.send("motionDetected", "soft gentle motion.");
-            accelReadSetColor();
+            AccelReadSetColor();
         }
 
         
@@ -327,16 +388,31 @@ function MMA8452QInterruptHandler() {
             reg = readReg(PULSE_SRC) // this clears SRC_PULSE_BIT
             server.log(format("Pulse src 0x%02x", reg))
             agent.send("motionDetected", "hard rapping.");
-            accelReadSetColor();
+            AccelReadSetColor();
         }
 
     } else {
 //        server.log("INT LOW")
     }
-} // MMA8452QInterruptHandler
+} // end AccelerometerIRQ
 /************************ General ***************************************/
 
-function accelReadSetColor()
+function GetReadyToSleep()
+{
+    local sleepSeconds = 3600;
+    server.expectonlinein(sleepSeconds);
+    imp.deepsleepfor(sleepSeconds);
+}
+
+function CheckBattery()
+{
+    agent.send("batteryUpdate", FuelGaugeReadSoC());
+    server.log("going  to sleep");
+    // this will effectively reset the system when it comes back on
+    imp.onidle(GetReadyToSleep);
+}
+
+function AccelReadSetColor()
 {
     local data = readAccelData();
 //    server.log("accels " + data[0] + " " + data[1] + " " + data[2])
@@ -344,9 +420,34 @@ function accelReadSetColor()
 } 
 
 
-//imp.setpowersave(true);
+function HandleReasonForWakeup() 
+{
+  // things to do on the first pass
+    local reason = hardware.wakereason();
+    
+    if (reason == WAKEREASON_PIN1) {
+        server.log("PIN1 wakeup")
+        AccelerometerIRQ();
+    } 
+    else if (reason == WAKEREASON_TIMER) {
+        server.log("Timer wakeup")
+        CheckBattery();
+    } else { // any other reason is a reset of sorts
+        server.log("Reboot")
+        AccelerometerResetFromBoot();
+        FuelGaugeResetFromBoot();
+    }
+    
+}
 
-agent.on("hug", setHugColor);
-MMA8452QReset();
+// things to do on every time based wake up
+imp.setpowersave(true);
+
 // Configure pin1 for wakeup.  Connect MMA8452Q INT1 pin to imp pin1.
-hardware.pin1.configure(DIGITAL_IN_WAKEUP, MMA8452QInterruptHandler);
+hardware.pin1.configure(DIGITAL_IN_WAKEUP, AccelerometerIRQ);
+
+// if this is the initial boot, take care of set up things
+HandleReasonForWakeup();
+
+
+

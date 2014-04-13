@@ -436,6 +436,7 @@ function HandleReasonForWakeup()
         server.log("Reboot")
         AccelerometerResetFromBoot();
         FuelGaugeResetFromBoot();
+        AccelReadSetColor(); 
     }
     
 }

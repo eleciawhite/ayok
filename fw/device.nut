@@ -1,5 +1,5 @@
 // Are you ok? widget for monitoring loved ones
-    
+server.setsendtimeoutpolicy(RETURN_ON_ERROR, WAIT_TIL_SENT, 30);
  
 /**************************** Hardware *******************************************/
  /* Pin Assignments according to silkscreen
@@ -7,8 +7,8 @@
  * Pin 2 = PWM Red
  * Pin 5 = PWM Blue
  * Pin 7 = PWM Green
- * Pin 8 = I2C SCL
- * Pin 9 = I2C SDA
+ * Pin 8 = I2C SCL  (yellow wire for me)
+ * Pin 9 = I2C SDA  (green wire for me)
 */
  
 hardware.i2c89.configure(CLOCK_SPEED_400_KHZ);
@@ -21,6 +21,7 @@ local currentLED = [0, 0, 0];
 local ledSteps = 20 // steps in ramp at 100ms
 local currentLedStep = 0 
 local inLEDRamp = false;
+const MIN_GOOD_STATE_OF_CHARGE = 25;
 
 class LEDColor extends InputPort
 {
@@ -111,7 +112,7 @@ function ledHugRamp() {
     }
 }
 
-function setHugColor (rgb)
+function SetHugColor (rgb)
 {
     if (inLEDRamp) {
         
@@ -168,16 +169,18 @@ function FuelGaugeReadSoC()
 	local data;
     data = i2c.read(FUEL_GAGUE_ADDR, format("%c", SOC_REG), numBytes);
 	if (data) {
-        local tmp = (data[0] << 8) + data[1];
+        local tmp = data[0];
         server.log("Fuel gauge read " + tmp);
 		return tmp;
-    }
+	} else {
+	    server.log("ERROR: cannot read fuel gauge!")
+	}
 
 }
 
 function FuelGaugeSleep(state) 
 {
-    
+    // add commands to put the fg in and out of sleep mode
 }
 function FuelGaugeResetFromBoot()
 {
@@ -292,6 +295,7 @@ function readReg(addressToRead) {
 function AccelerometerResetFromBoot() {
     local reg
     
+    server.log("Looking for accelerometer...")
     do {
         reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
         if (reg == I_AM_MMA8452Q) {
@@ -373,14 +377,15 @@ function readAccelData() {
 
 function AccelerometerIRQ() {
     local reg
+
  
     if (hardware.pin1.read() == 1) { // only react to low to high edge
+        IndicateGoodInteraction();
         reg = readReg(INT_SOURCE)
         if (reg & SRC_TRANSIENT_BIT) {
             reg = readReg(TRANSIENT_SRC) // this clears SRC_TRANSIENT_BIT
             server.log(format("Transient src 0x%02x", reg))
             agent.send("motionDetected", "soft gentle motion.");
-            AccelReadSetColor();
         }
 
         
@@ -388,7 +393,6 @@ function AccelerometerIRQ() {
             reg = readReg(PULSE_SRC) // this clears SRC_PULSE_BIT
             server.log(format("Pulse src 0x%02x", reg))
             agent.send("motionDetected", "hard rapping.");
-            AccelReadSetColor();
         }
 
     } else {
@@ -399,47 +403,68 @@ function AccelerometerIRQ() {
 
 function GetReadyToSleep()
 {
+    
     local sleepSeconds = 3600;
+    // this will effectively reset the system when it comes back on
     server.expectonlinein(sleepSeconds);
-    imp.deepsleepfor(sleepSeconds);
+    imp.deepsleepfor(sleepSeconds); 
 }
-
+ 
 function CheckBattery()
 {
     agent.send("batteryUpdate", FuelGaugeReadSoC());
     server.log("going  to sleep");
-    // this will effectively reset the system when it comes back on
     imp.onidle(GetReadyToSleep);
 }
 
-function AccelReadSetColor()
+function IndicateGoodInteraction()
 {
-    local data = readAccelData();
-//    server.log("accels " + data[0] + " " + data[1] + " " + data[2])
-    setHugColor(data);
-} 
-
-
-function HandleReasonForWakeup() 
-{
-  // things to do on the first pass
-    local reason = hardware.wakereason();
-    
-    if (reason == WAKEREASON_PIN1) {
-        server.log("PIN1 wakeup")
-        AccelerometerIRQ();
-    } 
-    else if (reason == WAKEREASON_TIMER) {
-        server.log("Timer wakeup")
-        CheckBattery();
-    } else { // any other reason is a reset of sorts
-        server.log("Reboot")
-        AccelerometerResetFromBoot();
-        FuelGaugeResetFromBoot();
-        AccelReadSetColor(); 
-    }
-    
+    local data =  [255,255,255];
+    SetHugColor(data);
 }
+function IndicateLowBattery()
+{
+    local data =  [200,200,0]; // yellow
+    SetHugColor(data);
+}
+function IndicateNoWiFi()
+{
+    local data =  [255,0,0]; // red
+    SetHugColor(data);
+}
+
+function HandleReasonForWakeup(unused = null) 
+{
+    local reason = hardware.wakereason();
+    local stateOfCharge = FuelGaugeReadSoC();
+    local timeout = 30;
+
+
+    if (reason == WAKEREASON_TIMER) {
+        // quiet wakeup
+        server.log("Timer wakeup")
+        CheckBattery(); 
+    } else {
+        if  (!server.isconnected()) {
+            IndicateNoWiFi()
+        } 
+        if (stateOfCharge < MIN_GOOD_STATE_OF_CHARGE)
+        {
+            server.log("Low battery " + stateOfCharge)
+            IndicateLowBattery();
+        }
+
+        if (reason == WAKEREASON_PIN1) {
+            server.log("PIN1 wakeup")
+            AccelerometerIRQ();
+        } else { // any other reason is a reset of sorts
+            server.log("Reboot")
+            AccelerometerResetFromBoot();
+            FuelGaugeResetFromBoot();
+        }
+    }
+}
+
 
 // things to do on every time based wake up
 imp.setpowersave(true);
@@ -447,8 +472,15 @@ imp.setpowersave(true);
 // Configure pin1 for wakeup.  Connect MMA8452Q INT1 pin to imp pin1.
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, AccelerometerIRQ);
 
-// if this is the initial boot, take care of set up things
-HandleReasonForWakeup();
+if  (!server.isconnected()) {
+    server.connect(HandleReasonForWakeup, 5)
+} else {
+    HandleReasonForWakeup();
+}
 
-
-
+// called after imp tries to reconnect to current
+// server and fails
+server.onunexpecteddisconnect(function(reason) {
+    local data = [255,0,255];
+    SetHugColor(data);
+});

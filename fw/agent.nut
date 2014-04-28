@@ -1,12 +1,45 @@
-// Log the URLs we need
-// server.log("My URL: " + http.agenturl());
+// Are you ok? 
+
+// This agent monitors the device, making sure it communicates
+// and gets moved by its user regularly. This will also send messages
+// via twitter or email (Twilio texting is an exercise
+// left to the next person).
+
+/************************ User modification area ***************************************/
+// There has got to be a better way to do this: I want to monitor multiple dtDebugMessageMotionDetected
+// and make sure they each get identified in messages. If you only have 
+// one device, remove these other two and just use that one
+monitoredDevices <- [
+        { name = "Hugh", url = "https://agent.electricimp.com/Kiqd6B2zsaHM", attn=""},
+        { name = "Maxwell", url = "https://agent.electricimp.com/nSEfD0YxscF2", attn="@logicalelegance"}
+        ];
+
+// debug output frequency: these prevent twitter flurries where you
+// get the same message 10 times because you are tapping the device
+const dtDebugMessageMotionDetected = 80; // seconds
+const dtDebugMessageBatteryUpdateDetected = 600; // seconds
+
+// This is how long the device will go without an update from the
+// user before it cries for help
+const dtNoMotionDetected = 43200; // seconds (43200 ==> 12 hours)
+const dtNoBatteryUpdate = 21600; // seconds (21600 ==> 6 hours)
+const dtEverythingFineUpdate = 25200; // 7 hours //432000; // seconds (432000 ==> 5 days)
 
 
+// Twitter permissions for @ayok_status
+// It is ok to use this as long as you update the monitoredDevices
+// so it prints your mane. 
+// Also note, it is for debug: if abused, the permissions will 
+// change (and remember others can see these tweets!).
+_CONSUMER_KEY <- "HxwLkDWJTHDZo5z3nENPA"
+_CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
+_ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
+_ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
+     
 
 /************************ Twitter ***************************************/
 // Many thanks to https://github.com/joel-wehr/Tutorial_Electric_Imp_MAX31855/blob/master/agent.nut
-// Code by forums user bodinegl
-// with a tiny bit of help from beardedinventor
+// Code by forums user bodinegl with a bit of help from @beardedinventor
 
 function left_rotate(x, n) { 
     // this has to handle signed integers
@@ -16,8 +49,8 @@ function left_rotate(x, n) {
 function swap32(val) {
     return ((val & 0xFF) << 24) | ((val & 0xFF00) << 8) | ((val >>> 8) & 0xFF00) | ((val >>> 24) & 0xFF);
 }
-    
-function sha1(message) {
+     
+function sha1(message) { 
 
     local h0 = 0x67452301;
     local h1 = 0xEFCDAB89;
@@ -223,7 +256,7 @@ class TwitterClient {
     
     function sign_hmac_sha1(key, str) {
         local sign = hmac_sha1(key,str)
-        server.log("sign="+fmthex(sign));
+        twitterDebug("sign="+fmthex(sign));
         return http.base64encode(sign)
     }
     
@@ -242,11 +275,11 @@ class TwitterClient {
         parm_string += "&"+post
         
         local signature_string = "POST&"+encode(postUrl)+"&"+encode(parm_string)
-        server.log("signature="+signature_string)
+        twitterDebug("signature="+signature_string)
         
         local key = encode(consumerSecret)+"&"+encode(accessSecret)
         local sha1 = encode(sign_hmac_sha1(key, signature_string))
-        server.log("key="+key+", sha1="+sha1)
+        twitterDebug("key="+key+", sha1="+sha1)
 
         local auth_header = "oauth_consumer_key=\""+consumerKey+"\","
         auth_header += "oauth_nonce=\""+nonce+"\","
@@ -255,8 +288,8 @@ class TwitterClient {
         auth_header += "oauth_timestamp=\""+time+"\","
         auth_header += "oauth_token=\""+accessToken+"\","
         auth_header += "oauth_version=\"1.0\""
-        server.log(auth_header)
-        
+        twitterDebug(auth_header)
+         
         local headers = { 
             "Authorization": "OAuth "+auth_header,
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
@@ -264,7 +297,7 @@ class TwitterClient {
         
         local response = http.post(postUrl, headers, post).sendsync();
         
-        server.log("response="+response);
+        twitterDebug("response="+response);
         return response
     }
     
@@ -276,72 +309,102 @@ class TwitterClient {
         
         local response = post_oauth1(postUrl, headers, post)
         if (response && response.statuscode != 200) {
-            server.log("Error updating_status tweet. HTTP Status Code " + response.statuscode);
-            server.log(response.body);
+            twitterDebug("Error updating_status tweet. HTTP Status Code " + response.statuscode);
+            twitterDebug(response.body);
             return null;
         }
     }
 }
 
-// Twitter permissions for @ayok_status
-_CONSUMER_KEY <- "HxwLkDWJTHDZo5z3nENPA"
-_CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
-_ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
-_ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
-     
+function twitterDebug(string)
+{
+    // when debugging twitter, turn on the server logging
+    // server.log(string)
+}
+
      
 twitter <- TwitterClient(_CONSUMER_KEY, _CONSUMER_SECRET, _ACCESS_TOKEN, _ACCESS_SECRET);
 /**************************** End twitter block  *******************************************/
+
+/**************************** Add email block  *******************************************/
+
+
+// TO DO: Add email block
+
+/**************************** End email block  *******************************************/
+
+/**************************** Message block  *******************************************/
+// These are the messages you use when bringing up the device,
+// for checking that the battery is draining slowly and 
+// testing taps. These don't use the attn string so on
+// Twitter they are relatively quiet
+function debugMessage(string)
+{
+    
+    local  myUrl =  http.agenturl();
+    local name = "Unknown"; // default
+    local attn = ""; // default
+
+    foreach (d in monitoredDevices)
+        if (d.url == myUrl) {
+            name = d.name;
+        }
+    
+    twitter.update_status(name + ": " + string);
+    server.log(name + ": " + string)
+}
+
+
+// These are the important messages:
+// 1) No user motion
+// 2) Batteries are low
+// 3) Intermittent, everything is fine
+function messageUser(string)
+{
+    
+    local  myUrl =  http.agenturl();
+    local name = "Unknown"; // default
+    local attn = ""; // default
+
+    foreach (d in monitoredDevices)
+        if (d.url == myUrl) {
+            name = d.name;
+            attn = d.attn;
+        }
+    
+    twitter.update_status(attn + " " + name + ": " + string);
+    server.log("!!!!" + name + ": " + string)
+}
+
 
 /**************************** Device handling  *******************************************/
 local lastTimeMotionDetected = 0;
 local lastTimeBatteryUpdate = 0;
 local lastBatteryReading = 0;
-local dtTweetMotionDetected = 80; // seconds
-local dtTweetBatteryUpdateDetected = 80; // seconds
-local dtTweetNoMotionDetected = 12 * 60 * 60; // seconds ==> 12 hours
-local dtTweetNoBatteryUpdate = 6 * 60 * 60; // seconds ==> 6 hours
 local batteryUpdateFromDeviceTimer;
 local motionUpdateFromDeviceTimer;
+local everythingIsFineDeviceTimer;
 
+// This creates a debug string if motion is sent from the device
+// More importantly, it resets the timer so we don't send an "I'm lonely" message
 function motionOnDevice(type)
 {
     local thisCheckInTime = time();
     if ((lastTimeMotionDetected != 0) && 
-        ((thisCheckInTime - lastTimeMotionDetected) > dtTweetMotionDetected)) {
+        ((thisCheckInTime - lastTimeMotionDetected) > dtDebugMessageMotionDetected)) {
 
         local d = date(thisCheckInTime, 'u'); // UTC time
         local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
         local str = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
-        twitter.update_status(day[d.wday] + str + " I felt movement. It was a " + type);
+        local sendStr = day[d.wday] + str + " I felt movement. It was a " + type;
+        debugMessage(sendStr);
     }
     lastTimeMotionDetected = thisCheckInTime;
     imp.cancelwakeup(motionUpdateFromDeviceTimer);
-    motionUpdateFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, noMotionFromDevice);
+    motionUpdateFromDeviceTimer = imp.wakeup(dtNoMotionDetected, noMotionFromDevice);
 
 }
-     
-function requestHandler(request, response) {
-  try {
-    if ("name" in request.query) {
-        server.log("Hug sent by " + request.query.name);
-                // convert the led query parameter to an integer
-                
-        local rgb = [request.query.r.tointeger(),
-                    request.query.g.tointeger(),
-                    request.query.b.tointeger()];
- 
-        device.send("hug", rgb); 
-        
-    }
 
-    // send a response back saying everything was OK.
-    response.send(200, "Thank you!");
-  } catch (ex) {
-    response.send(500, "Internal Server Error: " + ex);
-  }
-}
- 
 function noMotionFromDevice()
 {
     local stringOptions = [
@@ -359,56 +422,96 @@ function noMotionFromDevice()
         local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
     
         local choice  = math.rand() % stringOptions.len();
-        twitter.update_status(stringOptions[choice] + day[d.wday] + datestr);
+        local sendStr = stringOptions[choice] + day[d.wday] + datestr;
+        messageUser(sendStr)
     } else {
-        twitter.update_status("No movement since device turned on!");
-
+        sendStr = "No movement since device turned on!"
+        messageUser(sendStr)
     }
-    motionUpdateFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, noMotionFromDevice);
+    motionUpdateFromDeviceTimer = imp.wakeup(dtNoMotionDetected, noMotionFromDevice);
+
+    // everything is not fine, reset counter to happy message
+    imp.cancelwakeup(everythingIsFineDeviceTimer);
+    everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
+
 }
  
 function noBatteryUpdateFromDevice()
 {
+    local sendStr;
+    if (lastTimeBatteryUpdate) {
+        local stringOptions = [
+            "Device did not check in, last check in at ",
+            ];
+        local d = date(lastTimeBatteryUpdate, 'u'); // UTC time
+        local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
+        local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
+    
+        local choice  = math.rand() % stringOptions.len();
+        sendStr = stringOptions[choice] + day[d.wday] + datestr + 
+              " battery then: " + lastBatteryReading + 
+            ", minutes " + (time() - lastTimeBatteryUpdate)/60;
+    } else { 
+        sendStr = "Device has not checked in since server=restart."
+    }
+    messageUser(sendStr)
+
+    batteryUpdateFromDeviceTimer = imp.wakeup(dtNoBatteryUpdate, noBatteryUpdateFromDevice);
+
+    // everything is not fine, reset counter to happy message
+    imp.cancelwakeup(everythingIsFineDeviceTimer);
+    everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
+}
+
+function everythingFineUpdate()
+{
+    everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
     local stringOptions = [
-        "Device did not check in, last check in at ",
+        "Nothing to be concerned about, everything is going really well! Battery at ",
         ];
 
-    local d = date(lastTimeBatteryUpdate, 'u'); // UTC time
-    local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
-    local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
-
     local choice  = math.rand() % stringOptions.len();
-    twitter.update_status(stringOptions[choice] + day[d.wday] + datestr + 
-          " battery then: " + lastBatteryReading + 
-        " minutes " + (time() - lastTimeBatteryUpdate)/60);
+    local sendStr = stringOptions[choice] + lastBatteryReading;
+    messageUser(sendStr)
 
-    batteryUpdateFromDeviceTimer = imp.wakeup(dtTweetNoBatteryUpdate, noBatteryUpdateFromDevice);
+    everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
 }
 
 function batteryUpdateFromDevice(percentFull)
 {
-
     local thisCheckInTime = time();
-    if ((thisCheckInTime - lastTimeBatteryUpdate) > dtTweetBatteryUpdateDetected) {
-        server.log("Got battery update " + percentFull)
+    if ((thisCheckInTime - lastTimeBatteryUpdate) > dtDebugMessageBatteryUpdateDetected) {
         local d = date(thisCheckInTime, 'u'); // UTC time
         local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
         local datestr = format(" %02d:%02d:%02d", d.hour,  d.min, d.sec)
-        
-        twitter.update_status("Temporary message: " + day[d.wday] + datestr + " battery update: " 
-            + percentFull) ;
+        local sendStr = day[d.wday] + 
+            datestr + " battery update: " 
+            + percentFull ;
+        debugMessage(sendStr)
     }   
     // update the device timer
     imp.cancelwakeup(batteryUpdateFromDeviceTimer);
-    batteryUpdateFromDeviceTimer = imp.wakeup(dtTweetNoBatteryUpdate, noBatteryUpdateFromDevice);
+    batteryUpdateFromDeviceTimer = imp.wakeup(dtNoBatteryUpdate, noBatteryUpdateFromDevice);
     lastTimeBatteryUpdate = thisCheckInTime;
     lastBatteryReading = percentFull;
 } 
  
-// register the HTTP handler
-http.onrequest(requestHandler);
+// register the device actions. It will wake up with the accelerometer says
+// to (motion). It will also wake up on a timer to read the battery.
 device.on("motionDetected", motionOnDevice);
 device.on("batteryUpdate", batteryUpdateFromDevice);
-motionUpdateFromDeviceTimer = imp.wakeup(dtTweetNoMotionDetected, noMotionFromDevice);
-batteryUpdateFromDeviceTimer = imp.wakeup(dtTweetNoBatteryUpdate, noBatteryUpdateFromDevice);
-    
+
+// This timer is to complain if we haven't heard anything from the device.
+// We should be getting ~ hourly battery updates. If we miss more than one 
+// or two, then the device is having trouble with communication (or its
+// batteries are dead). We need to fuss because the regular monitoring is
+// therefore also offline.
+batteryUpdateFromDeviceTimer = imp.wakeup(dtNoBatteryUpdate, noBatteryUpdateFromDevice);
+
+// This is the critical timer, if the device does not sense motion in this 
+// time it will fuss
+motionUpdateFromDeviceTimer = imp.wakeup(dtNoMotionDetected, noMotionFromDevice);
+
+// Everyone needs to know things are ok. So every few days, we'll send an
+// all clear to indicate everything is functioning normally.
+everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);

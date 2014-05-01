@@ -1,10 +1,11 @@
-// Are you ok? 
+// Are you ok? widget for monitoring loved ones
 
 // This agent monitors the device, making sure it communicates
 // and gets moved by its user regularly. This will also send messages
 // via twitter or email (Twilio texting is an exercise
 // left to the next person).
-
+ 
+ server.log("Reloaded agent code.")
 /************************ User modification area ***************************************/
 // There has got to be a better way to do this: I want to monitor multiple dtDebugMessageMotionDetected
 // and make sure they each get identified in messages. If you only have 
@@ -452,7 +453,7 @@ function noBatteryUpdateFromDevice()
               " battery then: " + lastBatteryReading + 
             ", minutes " + (time() - lastTimeBatteryUpdate)/60;
     } else { 
-        sendStr = "Device has not checked in since server=restart."
+        sendStr = "Device has not checked in since server restart."
     }
     messageUser(sendStr)
 
@@ -465,7 +466,6 @@ function noBatteryUpdateFromDevice()
 
 function everythingFineUpdate()
 {
-    everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
     local stringOptions = [
         "Nothing to be concerned about, everything is going really well! Battery at ",
         ];

@@ -14,6 +14,14 @@ server.setsendtimeoutpolicy(RETURN_ON_ERROR, WAIT_TIL_SENT, 30);
 hardware.i2c89.configure(CLOCK_SPEED_400_KHZ);
 i2c <- hardware.i2c89 // now can use i2c.read()
 
+// when the system indicates low battery depends
+// on the number and type of batteries you use
+const MAX_EXPECTED_VOLTAGE = 6.0; // 4 AAs at 1.5V
+const MIN_EXPECTED_VOLTAGE = 4.0; // 4 AAs at 1.0V
+
+const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
+
+
 /**************************** LED *******************************************/
 // Variable to represent LED state
 local goalLED = [0xFF, 0xFF, 0xFF];
@@ -21,7 +29,6 @@ local currentLED = [0, 0, 0];
 local ledSteps = 20 // steps in ramp at 100ms
 local currentLedStep = 0 
 local inLEDRamp = false;
-const MIN_GOOD_STATE_OF_CHARGE = 25;
 
 class LEDColor extends InputPort
 {
@@ -126,74 +133,38 @@ function SetHugColor (rgb)
     }
 }
 
-/************************ Fuel Gauge ***************************************/
-// MAX17043 LiPo fuel gauge to determine the state of charge (SOC) since simply 
-// checking the voltage on a LiPo is unlikely to account for a good reading
-// (also, my A/D pin is otherwise occupied)
-
-// Holding both SDA and SCL logic-low forces the MAX17043/MAX17044 into Sleep mode.
-// Alternatively, set the SLEEP bit in the CONFIG register to logic 1 through I2C
-// To exit Sleep mode, write SLEEP to logic 0
-
-const FUEL_GAGUE_ADDR = 0x6C  // 0x6C write, 0x6D read
-const VCELL_REG       = 0x02  // Reports 12-bit A/D measurement of battery voltage. (R)
-const SOC_REG         = 0x04  // Reports 16-bit SOC result calculated by ModelGauge algorithm. (R)
-const MODE_REG        = 0x06  // Sends special commands to the IC. (W)
-const VERSION_REG     = 0x08  // Returns IC version. (R)
-const VERSION_EXPECTED = 0x0003
-const CONFIG_REG      = 0x0C  // Battery compensation. Adjusts IC performance based on application conditions.   (R/W)
-const COMMAND_REG     = 0xFE  // Sends special commands to the IC. (W)
-
-function FuelGaugeReadVersion()
-{
-	local numBytes = 2;
-	local data;
-    data = i2c.read(FUEL_GAGUE_ADDR, format("%c", VERSION_REG), numBytes);
-	if (data) {
-        local tmp = (data[0] << 8) + data[1];
-        if (tmp == VERSION_EXPECTED) {
-		    server.log("Fuel gauge found.");
-	    } else {
-    		server.log("Fuel gauge version " + format("0x%02x 0x%02X", data[0], data[1]));
-	    }
-		return 
-	} else {
-		server.log("Nothing read from fuel gauge.");
-	}
-}
+/************************ Battery monitoring ***************************************/
+// This project originally used a rechargeable battery with a MAX17043 LiPo fuel 
+// gauge to determine the state of charge (SOC). However, since the Impee is sleeping 
+// so much, we might get a reasonable battery life out of 4AAs. To get back to 
+// rechargeable, replace this code with that found in rechargeable_device.
 
 function FuelGaugeReadSoC()
 {
-    
-	local numBytes = 2;
-	local data;
-    data = i2c.read(FUEL_GAGUE_ADDR, format("%c", SOC_REG), numBytes);
-	if (data) {
-        local tmp = data[0];
-        server.log("Fuel gauge read " + tmp);
-		return tmp;
-	} else {
-	    server.log("ERROR: cannot read fuel gauge!")
-	}
-
+	local voltage = hardware.voltage();
+	local normalizedVoltgage = (voltage - MIN_EXPECTED_VOLTAGE) / (MAX_EXPECTED_VOLTAGE - MIN_EXPECTED_VOLTAGE);
+	if (normalizedVoltgage < 0) normalizedVoltgage = 0
+	local percent = math.floor(100 * normalizedVoltgage);
+	
+	return (percent);
 }
 
-function FuelGaugeSleep(state) 
-{
-    // add commands to put the fg in and out of sleep mode
-}
 function FuelGaugeResetFromBoot()
 {
-	FuelGaugeReadVersion();
-	FuelGaugeReadSoC();
+	// do nothing
 }
-
 
 /************************ Accelerometer ***************************************/
 // Many thanks to https://gist.github.com/duppypro/7225636 
 // I mooched much of that code for the MMA8452Q accelerometer, though I made some
 // changes for efficiency
+
 const ACCEL_ADDR = 0x3A // 0x1D << 1
+// Note: if your accelerometer has the SAO line pulled down 
+// (the resistor on the Sparkfun board), change the address to 
+/// const ACCEL_ADDR = 0×38 // 0x1C << 1
+
+// MMA8452 register addresses and bitmasks
 const STATUS        = 0x00
 const OUT_X_MSB        = 0x01
 const WHO_AM_I         = 0x0D
@@ -399,12 +370,11 @@ function AccelerometerIRQ() {
 //        server.log("INT LOW")
     }
 } // end AccelerometerIRQ
-/************************ General ***************************************/
 
+/************************ Device code  ***************************************/
 function GetReadyToSleep()
 {
-    
-    local sleepSeconds = 3600;
+    local sleepSeconds = 3600; // an hour
     // this will effectively reset the system when it comes back on
     server.expectonlinein(sleepSeconds);
     imp.deepsleepfor(sleepSeconds); 
@@ -419,7 +389,7 @@ function CheckBattery()
 
 function IndicateGoodInteraction()
 {
-    local data =  [255,255,255];
+    local data =  [255,255,255]; // white
     SetHugColor(data);
 }
 function IndicateLowBattery()
@@ -465,7 +435,6 @@ function HandleReasonForWakeup(unused = null)
     }
 }
 
-
 // things to do on every time based wake up
 imp.setpowersave(true);
 
@@ -473,7 +442,10 @@ imp.setpowersave(true);
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, AccelerometerIRQ);
 
 if  (!server.isconnected()) {
-    server.connect(HandleReasonForWakeup, 5)
+    // we probably can't get to the internet, try for 
+    // a little while (3 seconds), then get pushed to 
+    // HandleReasonForWakeup where IndicateNoWiFi will be called
+    server.connect(HandleReasonForWakeup, 3)
 } else {
     HandleReasonForWakeup();
 }

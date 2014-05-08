@@ -1,6 +1,28 @@
 // Are you ok? widget for monitoring loved ones
-server.setsendtimeoutpolicy(RETURN_ON_ERROR, WAIT_TIL_SENT, 30);
- 
+
+// License: Beerware.
+// It is ok to use, reuse, and modify this code for personal or commercial projects. 
+// If you do, consider adding a note in the comments giving a reference to 
+// this project and/or buying me a beer some day. 
+
+/**************************** User parameters ***************************************/
+// when the system should indicate low battery depends on the number 
+// and type of batteries you use
+const MAX_EXPECTED_VOLTAGE = 6.0; // 4 AAs at 1.5V
+const MIN_EXPECTED_VOLTAGE = 4.0; // 4 AAs at 1.0V
+const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
+
+// when there is movement, how much movement does there have to be
+// to get the accelerometer to wake up the device
+const ACCEL_TAP_THRESHOLD = 10; // experimentally derived threshold
+const ACCEL_TRANSIENT_THRESHOLD = 0x02;  // experimentally derived threshold
+
+// the LED ramps up to a color, holds for a bit, then ramps down
+const LED_HOLD_TIME = 5.0; // seconds
+const LED_RAMP_STEP_TIME = 0.05; // seconds per ramp step (0.05 = 200Mhz)
+const LED_RAMP_STEPS = 20; // steps in ramp at timing above
+
+
 /**************************** Hardware *******************************************/
  /* Pin Assignments according to silkscreen
  * Pin 1 = Input: wakeup interrupt from accelerometer
@@ -11,125 +33,105 @@ server.setsendtimeoutpolicy(RETURN_ON_ERROR, WAIT_TIL_SENT, 30);
  * Pin 9 = I2C SDA  (green wire for me)
 */
  
-hardware.i2c89.configure(CLOCK_SPEED_400_KHZ);
-i2c <- hardware.i2c89 // now can use i2c.read()
-
-// when the system indicates low battery depends
-// on the number and type of batteries you use
-const MAX_EXPECTED_VOLTAGE = 6.0; // 4 AAs at 1.5V
-const MIN_EXPECTED_VOLTAGE = 4.0; // 4 AAs at 1.0V
-
-const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
-
-
+wakeupPin <- hardware.pin1;
+redHWPin <- hardware.pin2;
+greenHWPin <- hardware.pin5;
+blueHWPin <- hardware.pin7;
+i2c <- hardware.i2c89; 
+i2c.configure(CLOCK_SPEED_400_KHZ);
 /**************************** LED *******************************************/
 // Variable to represent LED state
-local goalLED = [0xFF, 0xFF, 0xFF];
-local currentLED = [0, 0, 0];	
-local ledSteps = 20 // steps in ramp at 100ms
-local currentLedStep = 0 
-local inLEDRamp = false;
-
 class LEDColor extends InputPort
 {
     type = "array"
     name = "goalLED"
     redPin = null
-    grnPin = null
-    bluPin = null
+    greenPin = null
+    bluePin = null
 
+    goalLED = [0xFF, 0xFF, 0xFF]; // power on goal is white
+    currentLED = [0, 0, 0];	
+    inLEDRamp = false; // prevents multiple LED flares
 
-    constructor(name, redPin, grnPin, bluPin) {
+    constructor(redPin, greenPin, bluePin) {
         // PWM frequency in Hz
         local pwm_f = 500.0;
         redPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
-        grnPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
-        bluPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
+        greenPin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
+        bluePin.configure(PWM_OUT, 1.0/pwm_f, 0.0);
         
         this.redPin = redPin
-        this.grnPin = grnPin
-        this.bluPin = bluPin
+        this.greenPin = greenPin
+        this.bluePin = bluePin
         this.off();
     }
- 
-    function set(value) {
-        goalLED[0] = value.r;
-        goalLED[1] = value.g;
-        goalLED[2] = value.b;
-        if ("name" in value) {
-            server.log(format("%s sent color: %02X, %02X, %02X", value.name, 
-            goalLED[0], goalLED[1], goalLED[2]));      
-        } else {
-            server.log(format("No name: color %02X, %02X, %02X", 
-            goalLED[0], goalLED[1], goalLED[2]));      
-        }
-        ledHugRamp();
 
-    }
     function update() {
         local div =  (1.0/255.0);
         this.redPin.write( currentLED[0] * div);
-        this.grnPin.write( currentLED[1] * div);
-        this.bluPin.write( currentLED[2] * div);
+        this.greenPin.write( currentLED[1] * div);
+        this.bluePin.write( currentLED[2] * div);
     }        
     function off() {
         this.redPin.write(0);
-        this.grnPin.write(0);
-        this.bluPin.write(0);
+        this.greenPin.write(0);
+        this.bluePin.write(0);
+    }
+
+    function setGoalColor (red, green, blue)
+    {
+        if (inLEDRamp) {
+            // not updating if we are already doing something
+        } else {
+            goalLED[0] = red;
+            goalLED[1] = green;
+            goalLED[2] = blue;
+        
+            ledRamp();
+            inLEDRamp = true;
+        }
     }
 }
+local rgbLed = LEDColor(redHWPin, greenHWPin, blueHWPin);
 
-local rgbLed = LEDColor("RGBLed", hardware.pin2, hardware.pin5, hardware.pin7);
-function ledHugRamp() {
+// this function looks at the difference between the goal LED
+// and the actual LED and finds a way to smoothly transition
+function ledRamp() 
+{
     local difference = [0, 0, 0];
     local totalDifference = 0;
     local i;
     for (i = 0; i < 3; i++) {
-        difference[i] = goalLED[i] - currentLED[i];   
-        if (0 < difference[i] && difference[i] < ledSteps) {
-            difference[i] = ledSteps; // will be 1 after divide
+        difference[i] = rgbLed.goalLED[i] - rgbLed.currentLED[i];   
+        if (0 < difference[i] && difference[i] < LED_RAMP_STEPS) {
+            difference[i] = LED_RAMP_STEPS; // will be 1 after divide
             
-        } else if (0 > difference[i] && -difference[i] < ledSteps) {
-            difference[i] = -ledSteps; // will be -1
+        } else if (0 > difference[i] && -difference[i] < LED_RAMP_STEPS) {
+            difference[i] = -LED_RAMP_STEPS; // will be -1
         }
-        currentLED[i] += (difference[i] / ledSteps);
+        rgbLed.currentLED[i] += (difference[i] / LED_RAMP_STEPS);
         totalDifference += difference[i];
     }
     if (-3 < totalDifference && totalDifference < 3) {
         local goal = 0;
         for (i = 0; i < 3; i++) {
-            goal += goalLED[i];
-            currentLED[i] = goalLED[i]; 
-            goalLED[i] = 0;
+            goal += rgbLed.goalLED[i];
+            rgbLed.currentLED[i] = rgbLed.goalLED[i]; 
+            rgbLed.goalLED[i] = 0;
         }
         if (goal == 0) {
             // finished
-            inLEDRamp = false;
+            rgbLed.inLEDRamp = false;
             rgbLed.off();
-            server.log(format("OFF")); 
-            CheckBattery();
+            GetReadyToSleep();
 
         } else {
             rgbLed.update();
-            imp.wakeup(5.0, ledHugRamp);        // it will start ramping down
+            imp.wakeup(LED_HOLD_TIME, ledRamp);  // it will start ramping down
         }
-    } else {   
+    } else { 
         rgbLed.update();
-        imp.wakeup(0.05, ledHugRamp);
-    }
-}
-
-function SetHugColor (rgb)
-{
-    if (inLEDRamp) {
-        
-    
-    } else {
-        goalLED[0] = rgb[0];
-        goalLED[1] = rgb[1];
-        goalLED[2] = rgb[2];
-        ledHugRamp();
-        inLEDRamp = true;
+        imp.wakeup(LED_RAMP_STEP_TIME, ledRamp);
     }
 }
 
@@ -139,6 +141,11 @@ function SetHugColor (rgb)
 // so much, we might get a reasonable battery life out of 4AAs. To get back to 
 // rechargeable, replace this code with that found in rechargeable_device.
 
+function FuelGaugeResetFromBoot()
+{
+	// do nothing
+}
+
 function FuelGaugeReadSoC()
 {
 	local voltage = hardware.voltage();
@@ -147,11 +154,6 @@ function FuelGaugeReadSoC()
 	local percent = math.floor(100 * normalizedVoltgage);
 	
 	return (percent);
-}
-
-function FuelGaugeResetFromBoot()
-{
-	// do nothing
 }
 
 /************************ Accelerometer ***************************************/
@@ -252,8 +254,6 @@ function readSequentialRegs(addressToRead, numBytes) {
         data = i2c.read(ACCEL_ADDR, format("%c", addressToRead), numBytes)
         if (data == null) {
             server.error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.")
-            imp.sleep(i2cRetryPeriod)
-            server.error("retry i2c.read")
         }
     }
     return data
@@ -262,6 +262,16 @@ function readSequentialRegs(addressToRead, numBytes) {
 function readReg(addressToRead) {
     return readSequentialRegs(addressToRead, 1)[0]
 }  
+function AccelerometerSetActive(mode) {
+    // Sets the MMA8452Q active mode. 
+    // 0 == STANDBY for changing registers
+    // 1 == ACTIVE for outputting data
+    if (mode) {
+        writeReg(CTRL_REG1, readReg(CTRL_REG1) | ACTIVE_BIT)
+    } else {
+        writeReg(CTRL_REG1, readReg(CTRL_REG1) & ~ACTIVE_BIT)
+    }
+}
 // Reset the accelerometer
 function AccelerometerResetFromBoot() {
     local reg
@@ -298,17 +308,16 @@ function AccelerometerResetFromBoot() {
     // Set up accel for transient detection, see 
     // http://cache.freescale.com/files/sensors/doc/app_note/AN4071.pdf
     writeReg(TRANSIENT_CFG, 0x1E); // Enable X Y Z Axes and enable the latch
-    writeReg(TRANSIENT_THRESHOLD, 0x02); // experimentally derived threshold
+    writeReg(TRANSIENT_THRESHOLD, ACCEL_TRANSIENT_THRESHOLD);
     writeReg(TRANSIENT_COUNT, 0x05); // 50ms
     reg = readReg(TRANSIENT_SRC) // this clears the register
     
     // Set up accel for single tap pulse detection, see 
     // http://cache.freescale.com/files/sensors/doc/app_note/AN4072.pdf
     writeReg(PULSE_CFG, 0x55); // Enable X Y Z Axes and enable the latch
-    const tapThreshold = 10;  // experimentally derived threshold
-    writeReg(PULSE_THSX, tapThreshold); 
-    writeReg(PULSE_THSY, tapThreshold); 
-    writeReg(PULSE_THSZ, tapThreshold); 
+    writeReg(PULSE_THSX, ACCEL_TAP_THRESHOLD); 
+    writeReg(PULSE_THSY, ACCEL_TAP_THRESHOLD); 
+    writeReg(PULSE_THSZ, ACCEL_TAP_THRESHOLD); 
     writeReg(PULSE_TMLT, 0x03); // 30ms at 100Hz ODR
     writeReg(PULSE_LTCY, 100);  // 100ms at 100Hz ODR
     reg = readReg(PULSE_SRC) // this clears the register
@@ -320,37 +329,17 @@ function AccelerometerResetFromBoot() {
     
     AccelerometerSetActive(true);
 }
-function AccelerometerSetActive(mode) {
-    // Sets the MMA8452Q active mode. 
-    // 0 == STANDBY for changing registers
-    // 1 == ACTIVE for outputting data
-    if (mode) {
-        writeReg(CTRL_REG1, readReg(CTRL_REG1) | ACTIVE_BIT)
-    } else {
-        writeReg(CTRL_REG1, readReg(CTRL_REG1) & ~ACTIVE_BIT)
-    }
-}
 function readAccelData() {
     local rawData = null // x/y/z accel register data stored here, 3 bytes
-    local signedData = [0,0,0];
     rawData = readSequentialRegs(OUT_X_MSB, 3)  // Read the three raw data registers into data array
-    foreach (i, val in rawData) {
-        val = (val < 128 ? val : val - 256);
-        // now val is -128 to 128 and 2G
-        val = (val < 0 ? -val : val);
-        val = val * 2;
-        // I want absolute value, 0 to 256 and 1G
-        signedData[i] = (val > 256 ? 255 : val);
-        
-    }
-    return signedData;
+    return rawData;
 }
 
 function AccelerometerIRQ() {
     local reg
 
  
-    if (hardware.pin1.read() == 1) { // only react to low to high edge
+    if (wakeupPin.read() == 1) { // only react to low to high edge
         IndicateGoodInteraction();
         reg = readReg(INT_SOURCE)
         if (reg & SRC_TRANSIENT_BIT) {
@@ -380,7 +369,7 @@ function GetReadyToSleep()
     imp.deepsleepfor(sleepSeconds); 
 }
  
-function CheckBattery()
+function CheckBatteryAndGoToSleep()
 {
     agent.send("batteryUpdate", FuelGaugeReadSoC());
     server.log("going  to sleep");
@@ -389,18 +378,15 @@ function CheckBattery()
 
 function IndicateGoodInteraction()
 {
-    local data =  [255,255,255]; // white
-    SetHugColor(data);
+    rgbLed.setGoalColor(255, 255, 255); // white
 }
 function IndicateLowBattery()
 {
-    local data =  [200,200,0]; // yellow
-    SetHugColor(data);
+    rgbLed.setGoalColor(200, 200, 0); // yellow
 }
 function IndicateNoWiFi()
 {
-    local data =  [255,0,0]; // red
-    SetHugColor(data);
+    rgbLed.setGoalColor(255, 0, 0); // red
 }
 
 function HandleReasonForWakeup(unused = null) 
@@ -413,7 +399,7 @@ function HandleReasonForWakeup(unused = null)
     if (reason == WAKEREASON_TIMER) {
         // quiet wakeup
         server.log("Timer wakeup")
-        CheckBattery(); 
+        CheckBatteryAndGoToSleep(); 
     } else {
         if  (!server.isconnected()) {
             IndicateNoWiFi()
@@ -438,9 +424,14 @@ function HandleReasonForWakeup(unused = null)
 // things to do on every time based wake up
 imp.setpowersave(true);
 
-// Configure pin1 for wakeup.  Connect MMA8452Q INT1 pin to imp pin1.
-hardware.pin1.configure(DIGITAL_IN_WAKEUP, AccelerometerIRQ);
+// on error: don't try to reconnect, throw an error so we can indicate a 
+// problem to the user
+server.setsendtimeoutpolicy(RETURN_ON_ERROR, WAIT_TIL_SENT, 30);
 
+// Configure interrupt for wakeup.  Connect MMA8452Q INT1 pin to imp pin1.
+wakeupPin.configure(DIGITAL_IN_WAKEUP, AccelerometerIRQ);
+
+// figure out why we woke up
 if  (!server.isconnected()) {
     // we probably can't get to the internet, try for 
     // a little while (3 seconds), then get pushed to 
@@ -450,9 +441,3 @@ if  (!server.isconnected()) {
     HandleReasonForWakeup();
 }
 
-// called after imp tries to reconnect to current
-// server and fails
-server.onunexpecteddisconnect(function(reason) {
-    local data = [255,0,255];
-    SetHugColor(data);
-});

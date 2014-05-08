@@ -1,19 +1,23 @@
 // Are you ok? widget for monitoring loved ones
 
+// license: Beerware.
+// It is ok to use, reuse, and modify this code for personal or commercial projects. 
+// If you do, consider adding a note in the comments giving a reference to 
+// this project and/or buying me a beer some day. 
+
 // This agent monitors the device, making sure it communicates
 // and gets moved by its user regularly. This will also send messages
 // via twitter or email (Twilio texting is an exercise
 // left to the next person).
  
- server.log("Reloaded agent code.")
-/************************ User modification area ***************************************/
-// There has got to be a better way to do this: I want to monitor multiple dtDebugMessageMotionDetected
+/************************ Settings  ***************************************/
+// There has got to be a better way to do this: I want to monitor multiple devices
 // and make sure they each get identified in messages. If you only have 
 // one device, remove these other two and just use that one
 monitoredDevices <- [
         { name = "Hugh", url = "https://agent.electricimp.com/Kiqd6B2zsaHM", attn=""},
         { name = "Maxwell", url = "https://agent.electricimp.com/nSEfD0YxscF2", attn="@logicalelegance"}
-        ];
+];
 
 // debug output frequency: these prevent twitter flurries where you
 // get the same message 10 times because you are tapping the device
@@ -26,6 +30,7 @@ const dtNoMotionDetected = 43200; // seconds (43200 ==> 12 hours)
 const dtNoBatteryUpdate = 21600; // seconds (21600 ==> 6 hours)
 const dtEverythingFineUpdate = 25200; // 7 hours //432000; // seconds (432000 ==> 5 days)
 
+const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
 
 // Twitter permissions for @ayok_status
 // It is ok to use this as long as you update the monitoredDevices
@@ -37,6 +42,12 @@ _CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
 _ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
 _ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
      
+// Twilio set up for texting 
+// http://forums.electricimp.com/discussion/comment/4736
+// more extensive code https://github.com/joel-wehr/electric_imp_security_system/blob/master/agent.nut
+
+// Mailgun for emailing
+// http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
 
 /************************ Twitter ***************************************/
 // Many thanks to https://github.com/joel-wehr/Tutorial_Electric_Imp_MAX31855/blob/master/agent.nut
@@ -330,8 +341,6 @@ twitter <- TwitterClient(_CONSUMER_KEY, _CONSUMER_SECRET, _ACCESS_TOKEN, _ACCESS
 /**************************** Add email block  *******************************************/
 
 
-// TO DO: Add email block
-
 /**************************** End email block  *******************************************/
 
 /**************************** Message block  *******************************************/
@@ -360,7 +369,7 @@ function debugMessage(string)
 // 1) No user motion
 // 2) Batteries are low
 // 3) Intermittent, everything is fine
-function messageUser(string)
+function caregiverMessage(string)
 {
     
     local  myUrl =  http.agenturl();
@@ -424,17 +433,14 @@ function noMotionFromDevice()
     
         local choice  = math.rand() % stringOptions.len();
         local sendStr = stringOptions[choice] + day[d.wday] + datestr;
-        messageUser(sendStr)
+        caregiverMessage(sendStr)
     } else {
         sendStr = "No movement since device turned on!"
-        messageUser(sendStr)
+        caregiverMessage(sendStr)
     }
     motionUpdateFromDeviceTimer = imp.wakeup(dtNoMotionDetected, noMotionFromDevice);
 
-    // everything is not fine, reset counter to happy message
-    imp.cancelwakeup(everythingIsFineDeviceTimer);
-    everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
-
+    eveverythingNotFine();
 }
  
 function noBatteryUpdateFromDevice()
@@ -455,10 +461,13 @@ function noBatteryUpdateFromDevice()
     } else { 
         sendStr = "Device has not checked in since server restart."
     }
-    messageUser(sendStr)
+    caregiverMessage(sendStr)
 
     batteryUpdateFromDeviceTimer = imp.wakeup(dtNoBatteryUpdate, noBatteryUpdateFromDevice);
-
+    eveverythingNotFine();
+}
+function eveverythingNotFine()
+{
     // everything is not fine, reset counter to happy message
     imp.cancelwakeup(everythingIsFineDeviceTimer);
     everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
@@ -466,13 +475,24 @@ function noBatteryUpdateFromDevice()
 
 function everythingFineUpdate()
 {
-    local stringOptions = [
-        "Nothing to be concerned about, everything is going really well! Battery at ",
-        ];
-
-    local choice  = math.rand() % stringOptions.len();
-    local sendStr = stringOptions[choice] + lastBatteryReading;
-    messageUser(sendStr)
+    local sendStr;
+    if (lastBatteryReading > MIN_GOOD_STATE_OF_CHARGE) {
+        local stringOptions = [
+            "Nothing to be concerned about, everything is going really well! Battery at %d %%",
+            ];
+    
+        local choice  = math.rand() % stringOptions.len();
+        sendStr = stringOptions[choice];
+    } else {
+        local stringOptions = [
+            "Things are going fine but my batteries are getting low: %d %%",
+            ];
+    
+        local choice  = math.rand() % stringOptions.len();
+        sendStr = stringOptions[choice];
+    }
+                
+    caregiverMessage(format(sendStr, lastBatteryReading));
 
     everythingIsFineDeviceTimer = imp.wakeup(dtEverythingFineUpdate, everythingFineUpdate);
 }
@@ -488,7 +508,7 @@ function batteryUpdateFromDevice(percentFull)
             datestr + " battery update: " 
             + percentFull ;
         debugMessage(sendStr)
-    }   
+    }    
     // update the device timer
     imp.cancelwakeup(batteryUpdateFromDeviceTimer);
     batteryUpdateFromDeviceTimer = imp.wakeup(dtNoBatteryUpdate, noBatteryUpdateFromDevice);

@@ -41,10 +41,8 @@ i2c <- hardware.i2c89;
 i2c.configure(CLOCK_SPEED_400_KHZ);
 /**************************** LED *******************************************/
 // Variable to represent LED state
-class LEDColor extends InputPort
+class LEDColor
 {
-    type = "array"
-    name = "goalLED"
     redPin = null
     greenPin = null
     bluePin = null
@@ -152,8 +150,8 @@ function FuelGaugeReadSoC()
 	local normalizedVoltgage = (voltage - MIN_EXPECTED_VOLTAGE) / (MAX_EXPECTED_VOLTAGE - MIN_EXPECTED_VOLTAGE);
 	if (normalizedVoltgage < 0) normalizedVoltgage = 0
 	local percent = math.floor(100 * normalizedVoltgage);
-	
-	return (percent);
+
+	return percent;
 }
 
 /************************ Accelerometer ***************************************/
@@ -164,7 +162,7 @@ function FuelGaugeReadSoC()
 const ACCEL_ADDR = 0x3A // 0x1D << 1
 // Note: if your accelerometer has the SAO line pulled down 
 // (the resistor on the Sparkfun board), change the address to 
-/// const ACCEL_ADDR = 0×38 // 0x1C << 1
+/// const ACCEL_ADDR = 0x38 // 0x1C << 1
 
 // MMA8452 register addresses and bitmasks
 const STATUS        = 0x00
@@ -274,7 +272,7 @@ function AccelerometerSetActive(mode) {
 }
 // Reset the accelerometer
 function AccelerometerResetFromBoot() {
-    local reg
+    local reg = null;
     
     server.log("Looking for accelerometer...")
     do {
@@ -336,7 +334,7 @@ function readAccelData() {
 }
 
 function AccelerometerIRQ() {
-    local reg
+    local reg = null
 
  
     if (wakeupPin.read() == 1) { // only react to low to high edge
@@ -365,8 +363,7 @@ function GetReadyToSleep()
 {
     local sleepSeconds = 3600; // an hour
     // this will effectively reset the system when it comes back on
-    server.expectonlinein(sleepSeconds);
-    imp.deepsleepfor(sleepSeconds); 
+    server.sleepfor(sleepSeconds);
 }
  
 function CheckBatteryAndGoToSleep()
@@ -440,4 +437,3 @@ if  (!server.isconnected()) {
 } else {
     HandleReasonForWakeup();
 }
-

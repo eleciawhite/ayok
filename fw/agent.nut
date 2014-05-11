@@ -7,10 +7,53 @@
 
 // This agent monitors the device, making sure it communicates
 // and gets moved by its user regularly. This will also send messages
-// via twitter or email (Twilio texting is an exercise
+// via twitter (email and Twilio texting is an exercise
 // left to the next person).
  
 /************************ Settings  ***************************************/
+// Have to set up your unit the first time by putting in a URL:
+// https://agent.electricimp.com/{agentUrl}/settings?name={nameValue}&attn={attnValue}
+// Look at the top of the Imp editor for you agent URL, you'll see something like
+//    https://agent.electricimp.com/nSEfD0YxscF2  <-- random string numbers and letters
+// So you'll build up one that looks like
+// https://agent.electricimp.com/nSEfD0YxscF2/settings?name={Maxwell}&attn={@logicalelegance}
+// Where Maxwell is the name of the unit and @logicalelegance is where I want messages to be sent.
+
+
+// debug output frequency: these prevent twitter flurries where you
+// get the same message 10 times because you are tapping the device
+const dtDebugMessageMotionDetected = 80; // seconds
+const dtDebugMessageBatteryUpdateDetected = 600; // seconds
+
+// This is how long the device will go without an update from the
+// user before it cries for help
+//      43200   ==> 12 hours ==> three times a day
+//      129600  ==> 36 hours ==> every day (not same time every day)
+//      216000  ==> 60 hours ==> every couple days
+const dtNoMotionDetected = 129600; // seconds 
+const dtNoBatteryUpdate = 21600; // seconds (21600 ==> 6 hours)
+const dtEverythingFineUpdate = 432000; // seconds (432000 ==> 5 days)
+
+const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
+
+// Twitter permissions for @ayok_status
+// It is ok to use this as long as you update the monitoredDevices
+// so it prints your mane. 
+// Also note, it is for debug: if abused, the permissions will 
+// change (and remember others can see these tweets!).
+_CONSUMER_KEY <- "HxwLkDWJTHDZo5z3nENPA"
+_CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
+_ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
+_ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
+     
+// Twilio set up for texting 
+// http://forums.electricimp.com/discussion/comment/4736
+// more extensive code https://github.com/joel-wehr/electric_imp_security_system/blob/master/agent.nut
+
+// Mailgun for emailing
+// http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
+
+/************************ Handle setting the device's name ***************************************/
 // default settings
 settings <- { 
     name = "Unknown", 
@@ -49,9 +92,10 @@ function saveSettings(newName, newAttn) {
     
     // save values
     data.settings.name = newName;
-    data.settings.newAttn = newAttn;
+    data.settings.attn = newAttn;
     server.save(data);
 }
+
 
 function httpHandler(req, resp) {
     // grab the path the request was made to
@@ -74,35 +118,6 @@ function httpHandler(req, resp) {
 // attach httpHandler to onrequest event
 http.onrequest(httpHandler);
 
-// debug output frequency: these prevent twitter flurries where you
-// get the same message 10 times because you are tapping the device
-const dtDebugMessageMotionDetected = 80; // seconds
-const dtDebugMessageBatteryUpdateDetected = 600; // seconds
-
-// This is how long the device will go without an update from the
-// user before it cries for help
-const dtNoMotionDetected = 43200; // seconds (43200 ==> 12 hours)
-const dtNoBatteryUpdate = 21600; // seconds (21600 ==> 6 hours)
-const dtEverythingFineUpdate = 25200; // 7 hours //432000; // seconds (432000 ==> 5 days)
-
-const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
-
-// Twitter permissions for @ayok_status
-// It is ok to use this as long as you update the monitoredDevices
-// so it prints your mane. 
-// Also note, it is for debug: if abused, the permissions will 
-// change (and remember others can see these tweets!).
-_CONSUMER_KEY <- "HxwLkDWJTHDZo5z3nENPA"
-_CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
-_ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
-_ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
-     
-// Twilio set up for texting 
-// http://forums.electricimp.com/discussion/comment/4736
-// more extensive code https://github.com/joel-wehr/electric_imp_security_system/blob/master/agent.nut
-
-// Mailgun for emailing
-// http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
 
 /************************ Twitter ***************************************/
 // from: github.com/electricimp/reference/tree/master/webservices/twitter
@@ -166,11 +181,11 @@ class TwitterClient {
         
         local response = post_oauth1(postUrl, headers, _status)
         if (response && response.statuscode != 200) {
-            server.log("Error updating_status tweet. HTTP Status Code " + response.statuscode);
-            server.log(response.body);
+            twitterDebug("Error updating_status tweet. HTTP Status Code " + response.statuscode);
+            twitterDebug(response.body);
             return null;
         } else {
-            server.log("Tweet Successful!");
+           twitterDebug("Tweet Successful!");
         }
     }
 }
@@ -184,10 +199,6 @@ function twitterDebug(string)
 twitter <- TwitterClient(_CONSUMER_KEY, _CONSUMER_SECRET, _ACCESS_TOKEN, _ACCESS_SECRET);
 /**************************** End twitter block  *******************************************/
 
-/**************************** Add email block  *******************************************/
-
-
-/**************************** End email block  *******************************************/
 
 /**************************** Message block  *******************************************/
 // Returns a preformated DateTime string.
@@ -207,7 +218,7 @@ function debugMessage(string)
 {
     local message = settings.name + ": " + string;    
 
-    twitter.update_status(message);
+    twitter.Tweet(message);
     server.log(message)
 }
 
@@ -220,7 +231,7 @@ function caregiverMessage(string)
 {
     local message = settings.name + ": " + string;
     
-    twitter.update_status(attn + " " message);
+    twitter.Tweet(attn + " " message);
     server.log("!!!!" + message);
 }
 
@@ -243,7 +254,7 @@ function motionOnDevice(type)
 
         local datestr = DateTimeString(thisCheckInTime);
         local sendStr = datestr + " I felt movement. It was a " + type;
-        debugMessage(sendStr, thisCheckInTime);
+        debugMessage(sendStr);
     }
     lastTimeMotionDetected = thisCheckInTime;
     imp.cancelwakeup(motionUpdateFromDeviceTimer);
@@ -266,7 +277,7 @@ function noMotionFromDevice()
 
         local datestr = GetDateTimeString(lastTimeMotionDetected);
         local choice  = math.rand() % stringOptions.len();
-        local sendStr = stringOptions[choice] + day[d.wday] + datestr;
+        local sendStr = stringOptions[choice] + datestr;
         caregiverMessage(sendStr)
     } else {
         sendStr = "No movement since device turned on!"

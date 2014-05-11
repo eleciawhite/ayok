@@ -6,10 +6,10 @@
 // this project and/or buying me a beer some day. 
 
 /**************************** User parameters ***************************************/
-// when the system should indicate low battery depends on the number 
-// and type of batteries you use
-const MAX_EXPECTED_VOLTAGE = 6.0; // 4 AAs at 1.5V
-const MIN_EXPECTED_VOLTAGE = 4.0; // 4 AAs at 1.0V
+// hardware.voltage reads the output of the regulator so we don't see the 
+// whole range of the batteries, do the best with the info available
+const MAX_EXPECTED_VOLTAGE = 3.3; // max readable
+const MIN_EXPECTED_VOLTAGE = 2.5; // dying
 const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
 
 // when there is movement, how much movement does there have to be
@@ -235,8 +235,6 @@ function writeReg(addressToWrite, dataToWrite) {
         // server.log(format("i2c.write addr=0x%02x data=0x%02x", addressToWrite, dataToWrite))
         if (err == null) {
             server.error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.")
-            imp.sleep(i2cRetryPeriod)
-            server.error("retry i2c.write")
         }
     }
     return err

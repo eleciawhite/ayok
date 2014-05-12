@@ -11,14 +11,6 @@
 // left to the next person).
  
 /************************ Settings  ***************************************/
-// Have to set up your unit the first time by putting in a URL:
-// https://agent.electricimp.com/{agentUrl}/settings?name={nameValue}&attn={attnValue}
-// Look at the top of the Imp editor for you agent URL, you'll see something like
-//    https://agent.electricimp.com/nSEfD0YxscF2  <-- random string numbers and letters
-// So you'll build up one that looks like
-// https://agent.electricimp.com/nSEfD0YxscF2/settings?name={Maxwell}&attn={@logicalelegance}
-// Where Maxwell is the name of the unit and @logicalelegance is where I want messages to be sent.
-
 
 // debug output frequency: these prevent twitter flurries where you
 // get the same message 10 times because you are tapping the device
@@ -54,10 +46,18 @@ _ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
 // http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
 
 /************************ Handle setting the device's name ***************************************/
+// You have to set up your unit the first time by putting in a URL:
+// https://agent.electricimp.com/{agentUrl}/settings?name={nameValue}&attn={attnValue}
+// Look at the top of the Imp editor for you agent URL, you'll see something like
+//    https://agent.electricimp.com/abce1235  <-- random string numbers and letters
+// So you'll build up one that looks like
+// https://agent.electricimp.com/abce1235/settings?name={Maxwell}&attn={@logicalelegance}
+// Where Maxwell is the name of the unit and @logicalelegance is where I want messages to be sent.
+
 // default settings
 settings <- { 
-    name = "Unknown", 
-    attn = "" 
+    name = "Unknown",   // name of the unit
+    attn = ""           // who to send messages to
 };
 
 // Loads settings, if they exist
@@ -203,7 +203,7 @@ twitter <- TwitterClient(_CONSUMER_KEY, _CONSUMER_SECRET, _ACCESS_TOKEN, _ACCESS
 /**************************** Message block  *******************************************/
 // Returns a preformated DateTime string.
 // Helper function for debugMessage
-function DateTimeString(timestamp) {
+function GetDateTimeStr(timestamp) {
     local d = date(timestamp, 'u'); // UTC time
     local day = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"];
     
@@ -252,7 +252,7 @@ function motionOnDevice(type)
     if ((lastTimeMotionDetected != 0) && 
         ((thisCheckInTime - lastTimeMotionDetected) > dtDebugMessageMotionDetected)) {
 
-        local datestr = DateTimeString(thisCheckInTime);
+        local datestr = GetDateTimeString(thisCheckInTime);
         local sendStr = datestr + " I felt movement. It was a " + type;
         debugMessage(sendStr);
     }
@@ -344,7 +344,7 @@ function batteryUpdateFromDevice(percentFull)
 {
     local thisCheckInTime = time();
     if ((thisCheckInTime - lastTimeBatteryUpdate) > dtDebugMessageBatteryUpdateDetected) {
-        local datestr = GetDateTimeString(thisCheckInTime);
+        local datestr = GetDateTimeStr(thisCheckInTime);
         local sendStr = datestr + " battery update: " + percentFull ;
         debugMessage(sendStr)
     }    

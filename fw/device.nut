@@ -1,16 +1,17 @@
 // Are you ok? widget for monitoring loved ones
 
-// License: Beerware.
 // It is ok to use, reuse, and modify this code for personal or commercial projects. 
+// License: Beerware.
 // If you do, consider adding a note in the comments giving a reference to 
 // this project and/or buying me a beer some day. 
 
 /**************************** User parameters ***************************************/
-// hardware.voltage reads the output of the regulator so we don't see the 
+// Imp's hardware.voltage reads the output of the regulator so we don't see the 
 // whole range of the batteries, do the best with the info available
 const MAX_EXPECTED_VOLTAGE = 3.3; // max readable
-const MIN_EXPECTED_VOLTAGE = 2.5; // dying
+const MIN_EXPECTED_VOLTAGE = 2.6; // dying
 const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
+
 
 // when there is movement, how much movement does there have to be
 // to get the accelerometer to wake up the device

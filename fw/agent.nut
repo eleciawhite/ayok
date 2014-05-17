@@ -57,7 +57,7 @@ _ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
 // default settings
 settings <- { 
     name = "Unknown",   // name of the unit
-    attn = ""           // who to send messages to
+    attn = ""           // name of the unit
 };
 
 // Loads settings, if they exist
@@ -231,7 +231,7 @@ function caregiverMessage(string)
 {
     local message = settings.name + ": " + string;
     
-    twitter.Tweet(attn + " " message);
+    twitter.Tweet(settings.attn + " " message);
     server.log("!!!!" + message);
 }
 
@@ -252,7 +252,7 @@ function motionOnDevice(type)
     if ((lastTimeMotionDetected != 0) && 
         ((thisCheckInTime - lastTimeMotionDetected) > dtDebugMessageMotionDetected)) {
 
-        local datestr = GetDateTimeString(thisCheckInTime);
+        local datestr = GetDateTimeStr(thisCheckInTime);
         local sendStr = datestr + " I felt movement. It was a " + type;
         debugMessage(sendStr);
     }
@@ -275,7 +275,7 @@ function noMotionFromDevice()
     
     if (lastTimeMotionDetected) {
 
-        local datestr = GetDateTimeString(lastTimeMotionDetected);
+        local datestr = GetDateTimeStr(lastTimeMotionDetected);
         local choice  = math.rand() % stringOptions.len();
         local sendStr = stringOptions[choice] + datestr;
         caregiverMessage(sendStr)

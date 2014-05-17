@@ -33,10 +33,10 @@ const MIN_GOOD_STATE_OF_CHARGE = 25; // percent
 // so it prints your mane. 
 // Also note, it is for debug: if abused, the permissions will 
 // change (and remember others can see these tweets!).
-_CONSUMER_KEY <- "HxwLkDWJTHDZo5z3nENPA"
-_CONSUMER_SECRET <- "HvlmFx9dkp7j4odOIdfyD9Oc7C5RyJpI7HhEzHed4G8"
-_ACCESS_TOKEN <- "2416179944-INBz613eTjbzJN4q4iymufCcEsP5XJ6xW5Lr8Kp"
-_ACCESS_SECRET <- "1YdwAiJViQY45oP8tljdX0PGPyeL8G3tQHKtO43neBYqH"
+_CONSUMER_KEY <- "YOUR KEY" 
+_CONSUMER_SECRET <- "YOUR SECRET"
+_ACCESS_TOKEN <- "YOUR TOKEN"
+_ACCESS_SECRET <- "YOUR SECRET"
      
 // Twilio set up for texting 
 // http://forums.electricimp.com/discussion/comment/4736

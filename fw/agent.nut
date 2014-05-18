@@ -296,7 +296,7 @@ function noBatteryUpdateFromDevice()
             "Device did not check in, last check in at ",
             ];
 
-        local datestr = GetDateTimeStr(lastTimeBatterUpdate);
+        local datestr = GetDateTimeStr(lastTimeBatteryUpdate);
         local choice  = math.rand() % stringOptions.len();
         sendStr = stringOptions[choice] + datestr + 
               " battery then: " + lastBatteryReading + 

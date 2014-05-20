@@ -51,7 +51,7 @@ _ACCESS_SECRET <- "YOUR SECRET"
 // Look at the top of the Imp editor for you agent URL, you'll see something like
 //    https://agent.electricimp.com/abce1235  <-- random string numbers and letters
 // So you'll build up one that looks like
-// https://agent.electricimp.com/abce1235/settings?name={Maxwell}&attn={@logicalelegance}
+// https://agent.electricimp.com/abce1235/settings?name=Maxwell&attn=@logicalelegance
 // Where Maxwell is the name of the unit and @logicalelegance is where I want messages to be sent.
 
 // default settings
@@ -231,7 +231,7 @@ function caregiverMessage(string)
 {
     local message = settings.name + ": " + string;
     
-    twitter.Tweet(settings.attn + " " message);
+    twitter.Tweet(settings.attn + " " + message);
     server.log("!!!!" + message);
 }
 

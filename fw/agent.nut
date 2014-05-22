@@ -46,7 +46,7 @@ _ACCESS_SECRET <- "YOUR SECRET"
 // http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
 
 /************************ Handle setting the device's name ***************************************/
-// You have to set up your unit the first time by putting in a URL:
+// You have to set up your unit the first time by putting in a URL: 
 // https://agent.electricimp.com/{agentUrl}/settings?name={nameValue}&attn={attnValue}
 // Look at the top of the Imp editor for you agent URL, you'll see something like
 //    https://agent.electricimp.com/abce1235  <-- random string numbers and letters
@@ -280,7 +280,7 @@ function noMotionFromDevice()
         local sendStr = stringOptions[choice] + datestr;
         caregiverMessage(sendStr)
     } else {
-        sendStr = "No movement since device turned on!"
+        local sendStr = "No movement since device turned on!"
         caregiverMessage(sendStr)
     }
     motionUpdateFromDeviceTimer = imp.wakeup(dtNoMotionDetected, noMotionFromDevice);

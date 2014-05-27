@@ -40,10 +40,12 @@ _ACCESS_SECRET <- "YOUR SECRET"
      
 // Twilio set up for texting 
 // http://forums.electricimp.com/discussion/comment/4736
-// more extensive code https://github.com/joel-wehr/electric_imp_security_system/blob/master/agent.nut
+// more extensive code https://github.com/electricimp/reference/tree/master/webservices/twilio
 
 // Mailgun for emailing
 // http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
+_MAILGUN_API_KEY <- "key-something";
+_MAILGUN_DOMAIN <- "sandboxSomething.mailgun.org";
 
 /************************ Handle setting the device's name ***************************************/
 // You have to set up your unit the first time by putting in a URL: 
@@ -53,6 +55,9 @@ _ACCESS_SECRET <- "YOUR SECRET"
 // So you'll build up one that looks like
 // https://agent.electricimp.com/abce1235/settings?name=Maxwell&attn=@logicalelegance
 // Where Maxwell is the name of the unit and @logicalelegance is where I want messages to be sent.
+// This is also used to determine email vs twitter: if the first character of the attn is @, 
+// then twitter will be used, otherwise email. For example:
+// https://agent.electricimp.com/abce1235/settings?name=Maxwell&attn=show@embedded.fm
 
 // default settings
 settings <- { 
@@ -119,6 +124,32 @@ function httpHandler(req, resp) {
 http.onrequest(httpHandler);
 
 
+
+/************************ email ***************************************/
+// with thanks to Captain Slow http://captain-slow.dk/2014/01/07/using-mailgun-with-electric-imp/
+// to use?
+// mailgun("Electric Imp", "Just saying hi! :)");
+
+function mailgun(attn, subject, message)
+{
+
+  local from = "imp@no-reply.com";
+  local to   = attn;
+  
+  local request = http.post("https://api:" + _MAILGUN_API_KEY 
+    + "@api.mailgun.net/v2/" + _MAILGUN_DOMAIN + 
+    "/messages", {"Content-Type": "application/x-www-form-urlencoded"}, "from=" + from + "&to=" + to + "&subject=" + subject + "&text=" + message);
+  local response = request.sendsync();
+  mailerDebug("Mailgun response: " + response.body);
+}
+function mailerDebug(string)
+{
+    // when debugging, turn on the server logging
+    server.log(string)
+}
+
+
+
 /************************ Twitter ***************************************/
 // from: github.com/electricimp/reference/tree/master/webservices/twitter
 helper <- {
@@ -182,7 +213,7 @@ class TwitterClient {
         local response = post_oauth1(postUrl, headers, _status)
         if (response && response.statuscode != 200) {
             twitterDebug("Error updating_status tweet. HTTP Status Code " + response.statuscode);
-            twitterDebug(response.body);
+            twitterDebug("Twitter error means: " + response.body);
             return null;
         } else {
            twitterDebug("Tweet Successful!");
@@ -231,8 +262,12 @@ function caregiverMessage(string)
 {
     local message = settings.name + ": " + string;
     
-    twitter.Tweet(settings.attn + " " + message);
-    server.log("!!!!" + message);
+    if (settings.attn[0] == '@') { // tweet
+        twitter.Tweet(settings.attn + " " + message);
+        server.log("!!!!" + message);
+    } else { // mail
+        mailgun(settings.attn, message, message)
+    }
 }
 
 
@@ -302,7 +337,8 @@ function noBatteryUpdateFromDevice()
               " battery then: " + lastBatteryReading + 
             ", minutes " + (time() - lastTimeBatteryUpdate)/60;
     } else { 
-        sendStr = "Device has not checked in since server restart."
+        local datestr = GetDateTimeStr(time());
+        sendStr = "Device has not checked in since server restart. (" + datestr + ")";
     }
     caregiverMessage(sendStr)
 
